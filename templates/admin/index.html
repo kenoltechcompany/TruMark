@@ -1,0 +1,53 @@
+{% extends 'admin/master.html' %}
+
+{% block body %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <h1>Welcome to Admin Dashboard</h1>
+            
+            <div class="row mt-4">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Students</h5>
+                            <p class="card-text">Total: {{ db.session.query(models.Student).count() }}</p>
+                            <a href="{{ url_for('student.index_view') }}" class="btn btn-primary">Manage Students</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Sessions</h5>
+                            <p class="card-text">Total: {{ db.session.query(models.Session).count() }}</p>
+                            <a href="{{ url_for('session.index_view') }}" class="btn btn-primary">Manage Sessions</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Classrooms</h5>
+                            <p class="card-text">Total: {{ db.session.query(models.Classroom).count() }}</p>
+                            <a href="{{ url_for('classroom.index_view') }}" class="btn btn-primary">Manage Classrooms</a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">Users</h5>
+                            <p class="card-text">Total: {{ db.session.query(models.User).count() }}</p>
+                            <a href="{{ url_for('user.index_view') }}" class="btn btn-primary">Manage Users</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

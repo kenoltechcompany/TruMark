@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto bg-white shadow rounded-lg p-6">
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold">Add New Session</h2>
+    </div>
+
+    <form method="POST" action="{{ url_for('new_session') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="space-y-4">
+            <div>
+                <label for="week" class="block text-sm font-medium text-gray-700">Week Number</label>
+                <input type="number" name="week" id="week" required min="1" max="52"
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            </div>
+            
+            <div>
+                <label for="date" class="block text-sm font-medium text-gray-700">Date</label>
+                <input type="date" name="date" id="date" required
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            </div>
+
+            {% if current_user.is_admin %}
+            <div>
+                <label for="class_id" class="block text-sm font-medium text-gray-700">Class</label>
+                <select name="class_id" id="class_id" required onchange="updateLecturerOptions()"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="">Select a class</option>
+                    {% for class in classes %}
+                    <option value="{{ class.id }}">{{ class.name }} - Group {{ class.group }} (Year {{ class.year }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% else %}
+            <input type="hidden" name="class_id" value="{{ current_user.class_id }}">
+            {% endif %}
+
+            <div>
+                <label for="course_id" class="block text-sm font-medium text-gray-700">Course</label>
+                <select name="course_id" id="course_id" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="">Select a course</option>
+                    {% for course in courses %}
+                    <option value="{{ course.id }}">{{ course.course_code }} - {{ course.course_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label for="classroom_id" class="block text-sm font-medium text-gray-700">Classroom</label>
+                <select name="classroom_id" id="classroom_id" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="">Select a classroom</option>
+                    {% for classroom in classrooms %}
+                    <option value="{{ classroom.id }}">{{ classroom.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label for="lecturer_id" class="block text-sm font-medium text-gray-700">Lecturer</label>
+                <select name="lecturer_id" id="lecturer_id" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="">Select a lecturer</option>
+                    {% for lecturer in lecturers %}
+                    <option value="{{ lecturer.id }}" 
+                            data-classes="{{ lecturer.teaching_classes|map(attribute='id')|list|tojson }}"
+                            {% if not current_user.is_admin and lecturer.id == current_user.id %}selected{% endif %}>
+                        {{ lecturer.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex justify-end space-x-4">
+                <a href="{{ url_for('list_sessions') }}" 
+                   class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    Cancel
+                </a>
+                <button type="submit" 
+                        class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+                    Create Session
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+function updateLecturerOptions() {
+    const classId = document.getElementById('class_id').value;
+    const lecturerSelect = document.getElementById('lecturer_id');
+    const options = lecturerSelect.options;
+
+    for (let i = 0; i < options.length; i++) {
+        const option = options[i];
+        if (option.value === '') continue;  // Skip the placeholder option
+
+        const teachingClasses = JSON.parse(option.dataset.classes);
+        option.disabled = !teachingClasses.includes(parseInt(classId));
+    }
+
+    // Reset selection if currently selected lecturer doesn't teach this class
+    if (lecturerSelect.selectedOptions[0].disabled) {
+        lecturerSelect.value = '';
+    }
+}
+
+{% if not current_user.is_admin %}
+document.addEventListener('DOMContentLoaded', function() {
+    const lecturerSelect = document.getElementById('lecturer_id');
+    lecturerSelect.disabled = true;  // Disable lecturer selection for class reps
+});
+{% endif %}
+</script>
+{% endblock %} 

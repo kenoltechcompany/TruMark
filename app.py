@@ -1,0 +1,949 @@
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, send_file
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+import qrcode
+import os
+from werkzeug.utils import secure_filename
+import base64
+from io import BytesIO
+import numpy as np
+import json
+from numpy.linalg import norm
+from flask_wtf.csrf import CSRFProtect, generate_csrf
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut
+from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
+from flask_bcrypt import Bcrypt
+
+# Initialize Flask app
+app = Flask(__name__)
+app.config.from_pyfile('config.py')
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
+# Make csrf_token available in all templates
+@app.context_processor
+def inject_csrf_token():
+    return dict(csrf_token=generate_csrf)
+
+# Initialize database
+db = SQLAlchemy(app)
+
+# Initialize Flask-Login after Flask app initialization
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# Add bcrypt for password hashing
+bcrypt = Bcrypt(app)
+
+# Models
+class Student(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.String(10), unique=True, nullable=False)
+    firstname = db.Column(db.String(100), nullable=False)
+    lastname = db.Column(db.String(100), nullable=False)
+    othernames = db.Column(db.String(100), nullable=True)
+    face_encoding = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
+    _class = db.relationship('Class', backref='students')
+
+class Session(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    week = db.Column(db.String(100), nullable=False)
+    date = db.Column(db.DateTime, nullable=False)
+    classroom_id = db.Column(db.Integer, db.ForeignKey('classroom.id'), nullable=False)
+    class_ = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
+    lecturer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False)
+    
+    classroom = db.relationship('Classroom', backref='sessions')
+    lecturer = db.relationship('User', backref='sessions')
+
+class Attendance(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
+    session_id = db.Column(db.Integer, db.ForeignKey('session.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    altitude = db.Column(db.Float, nullable=True)
+
+class Program(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    program_name = db.Column(db.String(100), nullable=False)
+    # duration_years = db.Co`l`umn(db.Integer, nullable=False)
+
+class Course(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    course_name = db.Column(db.String(100), nullable=False)
+    course_code = db.Column(db.String(10), unique=True, nullable=False)
+    credits = db.Column(db.Integer, nullable=False)
+
+class Class(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    program_id = db.Column(db.Integer, db.ForeignKey('program.id'), nullable=False)
+    group = db.Column(db.String(1), nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    program = db.relationship('Program', backref='classes')
+
+class Classroom(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    coordinates = db.Column(db.Text, nullable=False)  # Store coordinates as a JSON string
+    altitude = db.Column(db.Float, default=0.0)  # In meters
+    altitude_tolerance = db.Column(db.Float, default=3.0)  # Changed from 10.0 to 3.0
+
+# Update User model with password hashing
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password = db.Column(db.String(120), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False)
+    is_rep = db.Column(db.Boolean, default=False)
+    is_lecturer = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=True)
+    class_ = db.relationship('Class', backref='representatives', foreign_keys=[class_id])
+    
+    # Add teaching classes relationship for lecturers
+    teaching_classes = db.relationship('Class', secondary='lecturer_classes',
+                                     backref=db.backref('lecturers', lazy='dynamic'))
+
+    def __init__(self, username, password, is_admin=False, is_lecturer=False, is_rep=False, class_id=None):
+        self.username = username
+        self.password = bcrypt.generate_password_hash(password).decode('utf-8')
+        self.is_admin = is_admin
+        self.is_lecturer = is_lecturer
+        self.is_rep = is_rep
+        if is_rep and class_id:  # Only set class_id if user is a class rep
+            self.class_id = class_id
+
+    def __repr__(self):
+        return f'<User {self.username}>'
+    def __str__(self):
+        return self.username
+    def __eq__(self, other):
+        if isinstance(other, User):
+            return self.username == other.username
+        return False
+    def __ne__(self, other):
+        return not self.__eq__(other)
+    def __lt__(self, other):
+        if isinstance(other, User):
+            return self.username < other.username
+        return NotImplemented
+    def __le__(self, other):
+        if isinstance(other, User):
+            return self.username <= other.username
+
+    def set_password(self, password):
+        self.password = bcrypt.generate_password_hash(password).decode('utf-8')
+
+    def check_password(self, password):
+        return bcrypt.check_password_hash(self.password, password)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# Update login route with password hashing
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        try:
+            username = request.form.get('username')
+            password = request.form.get('password')
+            
+            if not username or not password:
+                flash('Please provide both username and password')
+                return redirect(url_for('login'))
+            
+            user = User.query.filter_by(username=username).first()
+            
+            if user and user.check_password(password):
+                login_user(user)
+                if user.is_admin:
+                    return redirect(url_for('admin_dashboard'))
+                else:
+                    return redirect(url_for('user_dashboard'))
+            else:
+                flash('Invalid username or password')
+            return redirect(url_for('login'))
+
+        except Exception as e:
+            flash('An error occurred. Please try again.')
+            print(f"Login error: {str(e)}")
+            return redirect(url_for('login'))
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
+
+# Routes
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+# Update admin dashboard route
+@app.route('/admin/dashboard')
+@login_required
+def admin_dashboard():
+    if not current_user.is_admin:
+        return redirect(url_for('user_dashboard'))
+    
+    return render_template('admin/dashboard.html',
+        students_count=Student.query.count(),
+        sessions_count=Session.query.count(),
+        classrooms_count=Classroom.query.count(),
+        users_count=User.query.count(),
+        programs_count=Program.query.count(),
+        courses_count=Course.query.count()
+    )
+
+# Add new regular user dashboard route
+@app.route('/dashboard')
+@login_required
+def user_dashboard():
+    students_count = Student.query.count()
+    sessions_count = Session.query.count()
+    
+    recent_sessions = Session.query.order_by(Session.created_at.desc()).limit(5).all()
+    recent_students = Student.query.order_by(Student.created_at.desc()).limit(5).all()
+    
+    return render_template('dashboard.html',
+                         students_count=students_count,
+                         sessions_count=sessions_count,
+                         recent_sessions=recent_sessions,
+                         recent_students=recent_students)
+
+@app.route('/admin', methods=['GET', 'POST'])
+@csrf.exempt
+def admin_rediret():
+    redirect("/admin/dashboard")
+@app.route('/admin/students/new', methods=['GET', 'POST'])
+@csrf.exempt
+def new_student():
+    if request.method == 'POST':
+        try:
+            if request.content_type == 'application/json':
+                data = request.get_json(force=True)
+            else:
+                data = request.form.to_dict()
+            
+            # Check if the student ID already exists
+            existing_student = Student.query.filter_by(student_id=data.get('student_id')).first()
+            if existing_student:
+                return jsonify({'success': False, 'error': 'Student ID already exists'}), 400
+            
+            # Validate student ID format
+            student_id = data.get('student_id', '')
+            if not student_id.isdigit() or len(student_id) != 10:
+                return jsonify({'success': False, 'error': 'Invalid student ID format. Must be 10 digits'}), 400
+            
+            # Get face descriptor and ensure it's properly formatted
+            face_descriptor = data.get('face_descriptor', [])
+            if isinstance(face_descriptor, str):
+                face_descriptor = face_descriptor.strip("'")
+                face_descriptor = json.loads(face_descriptor)
+            
+            # Ensure it's a valid list of floats
+            face_descriptor = [float(x) for x in face_descriptor]
+            
+            # Store as a clean JSON string
+            face_encoding = json.dumps(face_descriptor)
+            print(data)
+            student = Student(
+                student_id=student_id,
+                firstname=data.get('firstname', 'Unknown'),
+                lastname=data.get('lastname', 'Unknown'),
+                othernames=data.get('othernames', 'Unknown'),
+                face_encoding=face_encoding,
+                class_id = data.get("class_id")
+            )
+            
+            db.session.add(student)
+            db.session.commit()
+        
+            return jsonify({'success': True, 'message': 'Student added successfully!'})
+        except Exception as e:
+            print(f"Error saving student: {str(e)}")
+            return jsonify({'success': False, 'error': str(e)}), 400
+    
+    classes = Class.query.all()
+    return render_template('admin/new_student.html', classes=classes)
+
+@app.route('/admin/sessions/new', methods=['GET', 'POST'])
+@login_required
+def new_session():
+    if not current_user.is_admin and not current_user.is_rep:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    if request.method == 'POST':
+        # For class reps, use their assigned class
+        class_id = current_user.class_id if current_user.is_rep else request.form['class_id']
+        
+        session = Session(
+            week=request.form['week'],
+            date=datetime.strptime(request.form['date'], '%Y-%m-%d'),
+            classroom_id=request.form['classroom_id'],
+            class_=class_id,
+            course_id=request.form['course_id'],
+            lecturer_id=request.form['lecturer_id']
+        )
+        
+        # Verify lecturer teaches this class
+        lecturer = User.query.get(request.form['lecturer_id'])
+        if class_id not in [c.id for c in lecturer.teaching_classes]:
+            flash('Selected lecturer does not teach this class', 'error')
+            return redirect(url_for('new_session'))
+        
+        db.session.add(session)
+        db.session.commit()
+        flash('Session created successfully')
+        return redirect(url_for('list_sessions'))
+    
+    # GET request - show the form
+    classrooms = Classroom.query.all()
+    courses = Course.query.all()
+    
+    if current_user.is_admin:
+        classes = Class.query.all()
+        lecturers = User.query.filter_by(is_lecturer=True).all()
+    else:
+        # For class reps, only show their class and its assigned lecturers
+        classes = [current_user.class_]
+        lecturers = User.query.filter(
+            User.is_lecturer == True,
+            User.teaching_classes.any(id=current_user.class_id)
+        ).all()
+    
+    return render_template('admin/sessions/new.html',
+                         classrooms=classrooms,
+                         courses=courses,
+                         classes=classes,
+                         lecturers=lecturers)
+
+@app.route('/attendance/<int:session_id>')
+def attendance(session_id):
+    session = Session.query.get_or_404(session_id)
+    return render_template('attendance.html', session=session)
+
+def find_matching_student(face_descriptor, threshold=0.35):
+    students = Student.query.filter(Student.face_encoding.isnot(None)).all()
+    
+    print(f"Total students with face encodings: {len(students)}")
+    
+    best_match = None
+    best_distance = float('inf')
+    
+    # Convert input face_descriptor to numpy array if it isn't already
+    face_descriptor = np.array(face_descriptor, dtype=np.float64)
+    
+    for student in students:
+        try:
+            # Parse the stored face encoding from JSON string to numpy array
+            stored_descriptor = np.array(json.loads(student.face_encoding.strip("'")), dtype=np.float64)
+            
+            # Calculate distance
+            distance = norm(face_descriptor - stored_descriptor)
+            print(f"Distance for {student.name}: {distance}")
+            
+            if distance < threshold and distance < best_distance:
+                best_distance = distance
+                best_match = student
+                
+        except Exception as e:
+            print(f"Error processing student {student.name}: {str(e)}")
+            # Try to clean up the stored encoding and retry
+            try:
+                # Remove any extra quotes and spaces
+                cleaned_encoding = student.face_encoding.strip("'").replace("'", '"')
+                stored_descriptor = np.array(json.loads(cleaned_encoding), dtype=np.float64)
+                
+                distance = norm(face_descriptor - stored_descriptor)
+                print(f"Distance for {student.name} (after cleanup): {distance}")
+                
+                if distance < threshold and distance < best_distance:
+                    best_distance = distance
+                    best_match = student
+            except Exception as e2:
+                print(f"Failed second attempt for {student.name}: {str(e2)}")
+                continue
+    
+    if best_match:
+        print(f"\nBest match found: {best_match.name} with distance: {best_distance}")
+    else:
+        print("\nNo match found above threshold")
+    
+    return best_match
+
+def point_inside_polygon(point, polygon_coords, altitude, classroom_altitude, tolerance):
+    # Check if within vertical tolerance (3 meters by default)
+    vertical_ok = abs(altitude - classroom_altitude) <= tolerance
+    
+    if not vertical_ok:
+        return False
+    
+    # Existing 2D coordinate check
+    x, y = point
+    n = len(polygon_coords)
+    inside = False
+    
+    p1x, p1y = polygon_coords[0]
+    for i in range(n + 1):
+        p2x, p2y = polygon_coords[i % n]
+        if y > min(p1y, p2y):
+            if y <= max(p1y, p2y):
+                if x <= max(p1x, p2x):
+                    if p1y != p2y:
+                        xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                    if p1x == p2x or x <= xinters:
+                        inside = not inside
+        p1x, p1y = p2x, p2y
+    
+    return inside
+
+@app.route('/api/mark-attendance', methods=['POST'])
+@csrf.exempt
+def mark_attendance():
+    try:
+        data = request.json
+        face_descriptor = np.array(data['face_descriptor'])
+        session_id = data['session_id']
+        latitude = data['latitude']
+        longitude = data['longitude']
+        
+        # Get the session and its classroom
+        session = Session.query.get_or_404(session_id)
+        classroom = Classroom.query.get_or_404(session.classroom_id)
+        
+        # Parse classroom coordinates
+        classroom_coords = json.loads(classroom.coordinates)
+        polygon_coords = []
+        for coord in classroom_coords:
+            lat, lon = map(float, coord.split(','))
+            polygon_coords.append((lat, lon))
+        
+        # Check altitude
+        altitude = data.get('altitude', 0)  # Get altitude from request
+        altitude = float(altitude) if altitude else 0.0
+
+        # Check altitude
+        altitude_ok = (classroom.altitude - classroom.altitude_tolerance <= altitude <= 
+                      classroom.altitude + classroom.altitude_tolerance)
+        
+        # Update classroom check
+        is_in_classroom = point_inside_polygon(
+            (float(latitude), float(longitude)), 
+            polygon_coords,
+            altitude,
+            classroom.altitude,
+            classroom.altitude_tolerance
+        )
+        
+        matched_student = find_matching_student(face_descriptor)
+        if not matched_student:
+            return jsonify({
+                'message': 'User not recognized',
+                'student_name': 'Unknown',
+                'in_classroom': is_in_classroom,
+                'altitude_check': altitude_ok
+            }), 200
+    
+        attendance = Attendance(
+                student_id=matched_student.id,
+            session_id=session_id,
+                timestamp=datetime.now(),
+            latitude=latitude,
+            longitude=longitude
+        )
+        
+        db.session.add(attendance)
+        db.session.commit()
+    
+        return jsonify({
+            'message': 'Attendance marked successfully',
+            'student_name': matched_student.name,
+            'in_classroom': is_in_classroom,
+            'altitude_check': altitude_ok
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/attendance/success/<studentname>')
+def attendance_success(studentname):
+    in_classroom = request.args.get('in_classroom', 'true').lower() == 'true'
+    return render_template('attendance_success.html', 
+                         student_name=studentname, 
+                         datetime=datetime,
+                         in_classroom=in_classroom)
+
+@app.route('/admin/students/delete/<int:student_id>', methods=['POST'])
+@csrf.exempt
+def delete_student(student_id):
+    try:
+        student = Student.query.get_or_404(student_id)
+        db.session.delete(student)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Student deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+# Add this function to get location name from coordinates
+def get_location_name(latitude, longitude):
+    try:
+        geolocator = Nominatim(user_agent="attendance_system")
+        location = geolocator.reverse(f"{latitude}, {longitude}", language='en')
+        return location.address if location else "Location not found"
+    except GeocoderTimedOut:
+        return "Location lookup timed out"
+    except Exception:
+        return "Location lookup failed"
+
+# Add this route to view session attendance
+@app.route('/admin/attendance/<int:session_id>')
+def session_attendance(session_id):
+    session = Session.query.get_or_404(session_id)
+    
+    # Query all attendance records for this session with student information
+    attendance_records = db.session.query(
+        Attendance, Student
+    ).join(
+        Student, Attendance.student_id == Student.id
+    ).filter(
+        Attendance.session_id == session_id
+    ).all()
+    
+    # Process attendance records to include location names
+    attendance_data = []
+    for attendance, student in attendance_records:
+        location_name = get_location_name(attendance.latitude, attendance.longitude)
+        attendance_data.append({
+            'student': student,
+            'attendance': attendance,
+            'location': location_name
+        })
+    
+    return render_template(
+        'admin/session_attendance.html',
+        session=session,
+        attendance_data=attendance_data
+    )
+
+@app.route('/admin/sessions/delete/<int:session_id>', methods=['POST'])
+@csrf.exempt
+def delete_session(session_id):
+    try:
+        session = Session.query.get_or_404(session_id)
+        
+        # Delete all attendance records for this session
+        Attendance.query.filter_by(session_id=session_id).delete()
+        
+        # Delete the session
+        db.session.delete(session)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Session deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/admin/users')
+@login_required
+def list_users():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('admin_dashboard'))
+    users = User.query.all()
+    return render_template('admin/users/list.html', students=users)
+
+@app.route('/admin/users/new', methods=['GET', 'POST'])
+@login_required
+def new_user():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        is_rep = bool(request.form.get('is_rep'))
+        class_id = request.form.get('class_id') if is_rep else None
+        
+        # Check if username already exists
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists', 'error')
+            return redirect(url_for('new_user'))
+        
+        # If user is a class rep, validate class selection
+        if is_rep and not class_id:
+            flash('Class selection is required for class representatives', 'error')
+            return redirect(url_for('new_user'))
+        
+        user = User(
+            username=username,
+            password=password,
+            is_admin=bool(request.form.get('is_admin')),
+            is_lecturer=bool(request.form.get('is_lecturer')),
+            is_rep=is_rep,
+            class_id=class_id if is_rep else None
+        )
+        
+        try:
+            db.session.add(user)
+            db.session.commit()
+            flash('User created successfully')
+            return redirect(url_for('list_users'))
+        except Exception as e:
+            db.session.rollback()
+            flash('Error creating user: ' + str(e), 'error')
+            return redirect(url_for('new_user'))
+    
+    # GET request - show the form
+    classes = Class.query.all()
+    return render_template('admin/users/new.html', classes=classes)
+
+@app.route('/admin/classrooms/new', methods=['GET', 'POST'])
+@csrf.exempt
+def new_classroom():
+    if request.method == 'POST':
+        name = request.form['name']
+        try:
+            corner1 = request.form['corner1']
+            corner2 = request.form['corner2']
+            corner3 = request.form['corner3']
+            corner4 = request.form['corner4']
+            altitude = float(request.form['altitude'])
+            altitude_tolerance = float(request.form['altitude_tolerance'])
+            
+            # Log the received coordinates for debugging
+            print(f"Received coordinates: corner1={corner1}, corner2={corner2}, corner3={corner3}, corner4={corner4}")
+            
+            # Validate that all corners are provided
+            if not all([corner1, corner2, corner3, corner4]):
+                return jsonify({'success': False, 'error': 'All corners must be provided.'}), 400
+            
+            # Create a new classroom
+            classroom = Classroom(
+                name=name,
+                coordinates=json.dumps([corner1, corner2, corner3, corner4]),
+                altitude=altitude,
+                altitude_tolerance=altitude_tolerance
+            )
+            
+            db.session.add(classroom)
+            db.session.commit()
+            
+            return jsonify({'success': True, 'message': 'Classroom added successfully!'})
+        except Exception as e:
+            print(f"Error saving classroom: {str(e)}")
+            return jsonify({'success': False, 'error': str(e)}), 400
+    
+    # Render the form for adding a new classroom
+    return render_template('admin/new_classroom.html')
+
+@app.route('/admin/classrooms')
+@login_required
+def list_classrooms():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    classrooms = Classroom.query.all()
+    return render_template('admin/classrooms.html', classrooms=classrooms)
+
+@app.route('/admin/classrooms/edit/<int:classroom_id>', methods=['GET', 'POST'])
+@csrf.exempt
+def edit_classroom(classroom_id):
+    classroom = Classroom.query.get_or_404(classroom_id)
+    
+    if request.method == 'POST':
+        try:
+            name = request.form['name']
+            corner1 = request.form['corner1']
+            corner2 = request.form['corner2']
+            corner3 = request.form['corner3']
+            corner4 = request.form['corner4']
+            altitude = float(request.form['altitude'])
+            altitude_tolerance = float(request.form['altitude_tolerance'])
+            
+            # Validate that all corners are provided
+            if not all([corner1, corner2, corner3, corner4]):
+                return jsonify({'success': False, 'error': 'All corners must be provided.'}), 400
+            
+            # Update classroom
+            classroom.name = name
+            classroom.coordinates = json.dumps([corner1, corner2, corner3, corner4])
+            classroom.altitude = altitude
+            classroom.altitude_tolerance = altitude_tolerance
+            
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Classroom updated successfully!'})
+        except Exception as e:
+            print(f"Error updating classroom: {str(e)}")
+            return jsonify({'success': False, 'error': str(e)}), 400
+    
+    coordinates = json.loads(classroom.coordinates)
+    return render_template('admin/edit_classroom.html', classroom=classroom, coordinates=coordinates)
+
+@app.route('/admin/classrooms/delete/<int:classroom_id>', methods=['POST'])
+@csrf.exempt
+def delete_classroom(classroom_id):
+    try:
+        classroom = Classroom.query.get_or_404(classroom_id)
+        
+        # Check if classroom is being used in any sessions
+        sessions = Session.query.filter_by(classroom_id=classroom_id).first()
+        if sessions:
+            return jsonify({
+                'success': False, 
+                'error': 'Cannot delete classroom as it is being used in one or more sessions.'
+            }), 400
+        
+        db.session.delete(classroom)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Classroom deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/qrcode/<session_id>')
+def generate_qrcode(session_id):
+    try:
+        # Generate dynamic attendance URL
+        attendance_url = url_for('mark_attendance', session_id=session_id, _external=True)
+        
+        # Create QR code
+        img = qrcode.make(attendance_url)
+        img_io = BytesIO()
+        img.save(img_io, 'PNG')
+        img_io.seek(0)
+        
+        return send_file(img_io, mimetype='image/png')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/students')
+@login_required
+def list_students():
+    students = Student.query.order_by(Student.created_at.desc()).all()
+    return render_template('students/list.html', students=students)
+
+@app.route('/sessions')
+@login_required
+def list_sessions():
+    sessions = Session.query.order_by(Session.date.desc()).all()
+    return render_template('sessions/list.html', sessions=sessions)
+
+@app.route('/admin/programs')
+@login_required
+def list_programs():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    programs = Program.query.all()
+    return render_template('admin/programs.html', programs=programs)
+
+@app.route('/admin/programs/new', methods=['GET', 'POST'])
+@login_required
+def new_program():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    if request.method == 'POST':
+        program = Program(
+            program_name=request.form['program_name'],
+            # duration_years=request.form['duration_years']
+        )
+        db.session.add(program)
+        db.session.commit()
+        flash('Program created successfully')
+        return redirect(url_for('list_programs'))
+    
+    return render_template('admin/programs/new.html')
+
+@app.route('/admin/courses')
+@login_required
+def list_courses():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    courses = Course.query.all()
+    return render_template('admin/courses.html', courses=courses)
+
+@app.route('/admin/courses/new', methods=['GET', 'POST'])
+@login_required
+def new_course():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    if request.method == 'POST':
+        course = Course(
+            course_code=request.form['course_code'],
+            course_name=request.form['course_name'],
+            credits=request.form['credits']
+        )
+        db.session.add(course)
+        db.session.commit()
+        flash('Course created successfully')
+        return redirect(url_for('list_courses'))
+    
+    return render_template('admin/courses/new.html')
+
+@app.route('/admin/programs/edit/<int:program_id>', methods=['GET', 'POST'])
+@login_required
+def edit_program(program_id):
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    program = Program.query.get_or_404(program_id)
+    
+    if request.method == 'POST':
+        program.program_name = request.form['program_name']
+        program.duration_years = request.form['duration_years']
+        db.session.commit()
+        flash('Program updated successfully')
+        return redirect(url_for('list_programs'))
+    
+    return render_template('admin/programs/edit.html', program=program)
+
+@app.route('/admin/courses/edit/<int:course_id>', methods=['GET', 'POST'])
+@login_required
+def edit_course(course_id):
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    course = Course.query.get_or_404(course_id)
+    
+    if request.method == 'POST':
+        course.course_code = request.form['course_code']
+        course.course_name = request.form['course_name']
+        course.credits = request.form['credits']
+        db.session.commit()
+        flash('Course updated successfully')
+        return redirect(url_for('list_courses'))
+    
+    return render_template('admin/courses/edit.html', course=course)
+
+@app.route('/admin/classes')
+@login_required
+def list_classes():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    classes = Class.query.all()
+    return render_template('admin/classes.html', classes=classes)
+
+@app.route('/admin/classes/new', methods=['GET', 'POST'])
+@login_required
+def new_class():
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    if request.method == 'POST':
+        class_ = Class(
+            name=request.form['name'],
+            program_id=request.form['program_id'],
+            group=request.form['group'],
+            year=request.form['year']
+        )
+        db.session.add(class_)
+        db.session.commit()
+        flash('Class created successfully')
+        return redirect(url_for('list_classes'))
+    
+    programs = Program.query.all()
+    return render_template('admin/classes/new.html', programs=programs)
+
+@app.route('/admin/classes/edit/<int:class_id>', methods=['GET', 'POST'])
+@login_required
+def edit_class(class_id):
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    class_ = Class.query.get_or_404(class_id)
+    
+    if request.method == 'POST':
+        class_.name = request.form['name']
+        class_.program_id = request.form['program_id']
+        class_.group = request.form['group']
+        class_.year = request.form['year']
+        db.session.commit()
+        flash('Class updated successfully')
+        return redirect(url_for('list_classes'))
+    
+    programs = Program.query.all()
+    return render_template('admin/classes/edit.html', class_=class_, programs=programs)
+
+@app.route('/admin/classes/delete/<int:class_id>', methods=['POST'])
+@login_required
+def delete_class(class_id):
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    try:
+        class_ = Class.query.get_or_404(class_id)
+        # Check if class has any representatives
+        if User.query.filter_by(class_id=class_id).first():
+            return jsonify({
+                'success': False,
+                'error': 'Cannot delete class as it has assigned representatives'
+            }), 400
+        
+        db.session.delete(class_)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Class deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/admin/sessions/edit/<int:session_id>', methods=['GET', 'POST'])
+@login_required
+def edit_session(session_id):
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('user_dashboard'))
+    
+    session = Session.query.get_or_404(session_id)
+    
+    if request.method == 'POST':
+        session.name = request.form['name']
+        session.date = datetime.strptime(request.form['date'], '%Y-%m-%d')
+        session.classroom_id = request.form['classroom_id']
+        session.lecturer_id = request.form['lecturer_id']
+        db.session.commit()
+        flash('Session updated successfully')
+        return redirect(url_for('list_sessions'))
+    
+    classrooms = Classroom.query.all()
+    lecturers = User.query.filter_by(is_lecturer=True).all()
+    return render_template('admin/sessions/edit.html', 
+                         session=session,
+                         classrooms=classrooms,
+                         lecturers=lecturers)
+
+# Add new association table for lecturer-class relationship
+lecturer_classes = db.Table('lecturer_classes',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('class_id', db.Integer, db.ForeignKey('class.id'), primary_key=True)
+)
+
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    
+    print("WARNING: For camera access on all devices, this app must be served over HTTPS in production.")
+    app.run(host='0.0.0.0', port=5000, debug=True)

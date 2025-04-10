@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Enroll Student - Academic Attendance{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto bg-white rounded-xl shadow-lg p-8">
+    <div class="mb-8 border-b border-academic-light pb-6">
+        <h2 class="text-3xl font-academic text-academic-secondary">Student Enrollment</h2>
+        <p class="text-gray-600 mt-2">Register new students with biometric authentication</p>
+    </div>
+
+    <form id="studentForm" class="space-y-6">
+        <div class="grid md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium text-academic-secondary mb-2">Student ID</label>
+                <input type="text"  pattern="[0-9]{10}" name="student_id" required 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-academic-blue focus:ring-2 focus:ring-academic-blue/20 transition">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-academic-secondary mb-2">Firstname</label>
+                <input type="text" name="firstname" required 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-academic-blue focus:ring-2 focus:ring-academic-blue/20 transition">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-academic-secondary mb-2">Lastname</label>
+                <input type="text" name="lastname" required 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-academic-blue focus:ring-2 focus:ring-academic-blue/20 transition">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-academic-secondary mb-2">Othernames</label>
+                <input type="text" name="othernames"  
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-academic-blue focus:ring-2 focus:ring-academic-blue/20 transition">
+            </div>
+            <!-- New Class Selection Field -->
+            <div>
+                <label for="class_id" class="block text-sm font-medium text-gray-700">Class</label>
+                <select name="class_id" id="class_id" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="">Select a Class</option>
+                    {% for class in classes %}
+                    <option value="{{ class.id }}">
+                        {{ class.name }} - {{ class.program.program_name }} (Year {{ class.year }}, Group {{ class.group }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-blue-600 font-bold">Face Enrollment</label>
+            <div class="border p-3 rounded-lg bg-gray-100">
+                <div class="relative aspect-video rounded-lg overflow-hidden bg-gray-800">
+                    <video width="640" height="480" id="video" class="object-cover" autoplay muted></video>
+                    <canvas id="overlay" class="absolute top-0 left-0" width="640" height="480"></canvas>
+                </div>
+                <div id="status" class="text-center text-lg mb-4 p-2"></div>
+                <input type="hidden" name="face_descriptor" id="face_descriptor">
+            </div>
+        </div>
+
+        <div class="flex justify-end space-x-4">
+            <a href="{{ url_for('admin_dashboard') }}" 
+               class="px-6 py-2.5 border border-gray-300 rounded-lg text-academic-secondary hover:bg-gray-50 transition-colors">
+                Cancel
+            </a>
+            <button type="button" id="readyButton" 
+                    class="px-6 py-2.5 bg-academic-blue text-white rounded-lg hover:bg-academic-secondary transition-colors flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                <i class="bi bi-camera-video me-2"></i> Complete Enrollment
+            </button>
+        </div>
+    </form>
+    <div class="flex items-center gap-3 mb-3">
+        <button type="button" onclick="startEnrollment()" 
+                class="bg-blue-600 text-white px-4 py-2 rounded">
+            <i class="h-5 w-5 mr-2"></i>
+            Start Face Enrollment
+        </button>
+        <div id="enrollmentStatus" class="flex items-center gap-2">
+            <div class="status-indicator"></div>
+            <span class="status-message">Ready to start enrollment</span>
+        </div>  
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.6.1/dist/face-api.min.js"></script>
+<script src="{{ url_for('static', filename='js/face-recognition.js') }}"></script>
+<script>
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const status = document.getElementById('status');
+const form = document.getElementById('studentForm');
+const readyButton = document.getElementById('readyButton');
+
+let faceCheckInterval;
+
+readyButton.addEventListener('click', () => {
+    status.textContent = 'Loading face recognition models...';
+    loadModels().then(modelsLoaded => {
+        if (modelsLoaded) {
+            status.textContent = 'Ready to start. Initializing camera...';
+            status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
+            initializeCamera();
+        } else {
+            status.textContent = 'Error loading models. Please try again.';
+            status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
+        }
+    });
+});
+
+async function initializeCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: {
+                width: 640,
+                height: 480,
+                facingMode: 'user'
+            }
+        });
+        video.srcObject = stream;
+        status.textContent = 'Camera initialized. Please look at the camera.';
+        status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
+        
+        // Start face detection after camera is initialized
+        video.addEventListener('play', startFaceDetection);
+    } catch (error) {
+        status.textContent = 'Error accessing camera: ' + error.message;
+        status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
+    }
+}
+
+async function startFaceDetection() {
+    try {
+        const canvas = document.createElement('canvas');
+        canvas.id = 'overlay';
+        canvas.className = 'absolute top-0 left-0';
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        // console.log(canvas);
+        const existingOverlay = document.getElementById('overlay');
+        // console.log(existingOverlay);
+        existingOverlay.parentNode.replaceChild(canvas, existingOverlay);
+
+        faceCheckInterval = setInterval(async () => {
+            try {
+                const result = await detectFace(video);
+                if (result && result.detection) {  // Check for detection
+                    console.log("Face detected with descriptor");
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    drawFaceDetections(video, canvas, result.detection);
+                    status.textContent = 'Face detected. Capturing...';
+                    status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
+
+                    // Automatically capture face after 1 second
+                    clearInterval(faceCheckInterval); // Stop further detection
+                    captureFace(result.detection);
+                } else {
+                    console.log("No face detected or no descriptor available");
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    status.textContent = 'No face detected. Please position your face in the camera.';
+                    status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
+                }
+            } catch (error) {
+                console.error("Error in face detection interval:", error);
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                status.textContent = 'Error detecting face. Please try again.';
+                status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
+            }
+        }, 100);
+    } catch (error) {
+        console.error("Error in startFaceDetection:", error);
+        status.textContent = 'Error starting face detection: ' + error.message;
+        status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
+    }
+}
+
+async function captureFace(detection) {
+    try {
+        status.textContent = 'Capturing face data (please stay still)...';
+        status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
+
+        // Use the descriptor from the detection directly if available
+        let faceDescriptor;
+        if (detection && detection.descriptor) {
+            faceDescriptor = detection.descriptor;
+        } else {
+            // Fallback to getting average descriptor
+            faceDescriptor = await getAverageFaceDescriptor(video);
+        }
+        
+        if (!faceDescriptor) {
+            throw new Error('Could not get a valid face descriptor. Please try again.');
+        }
+
+        // Convert descriptor to array if it isn't already
+        const descriptorArray = Array.isArray(faceDescriptor) ? faceDescriptor : Array.from(faceDescriptor);
+
+        if (descriptorArray.length === 0) {
+            throw new Error('Face descriptor is empty. Please try again.');
+        }
+
+        document.getElementById('face_descriptor').value = JSON.stringify(descriptorArray);
+        status.textContent = 'Face captured! Saving student...';
+        status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
+
+        // Use AJAX to submit the form data
+        const formData = new FormData(form);
+        const response = await fetch('/admin/students/new', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: formData
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            status.textContent = 'Student saved successfully!';
+            status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
+            setTimeout(() => {
+                window.location.href = '/admin/dashboard';
+            }, 2000);
+        } else {
+            throw new Error(result.error || 'Failed to save student');
+        }
+    } catch (error) {
+        console.error('Error capturing face:', error);
+        status.textContent = 'Error: ' + error.message;
+        status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
+        
+        // Reset the detection process so user can try again
+        setTimeout(() => {
+            status.textContent = 'Please try again';
+            startFaceDetection();
+        }, 2000);
+    }
+}
+</script>
+
+<style>
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #6c757d;
+    transition: all 0.3s ease;
+}
+
+#status.processing .status-indicator {
+    background: #ffc107;
+    animation: pulse 1.5s infinite;
+}
+
+#status.success .status-indicator {
+    background: #198754;
+}
+
+#status.error .status-indicator {
+    background: #dc3545;
+}
+
+.status-message {
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.95); opacity: 0.8; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(0.95); opacity: 0.8; }
+}
+</style>
+{% endblock %}
