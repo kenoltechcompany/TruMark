@@ -1,30 +1,48 @@
-from app import Program, Course, Student, Lecturer, User
-from app import db
+from app import Program, Course, Student, User, Class, lecturer_classes
+from app import app, db
+from datetime import datetime
 
 def populate_db():
     # Create sample users
-    user1 = User(username='kelvin')
-    user1.set_password('kelvin')
-    user1.is_admin = False
-    user3 = User(username='admin')
-    user3.set_password('admin')
-    user3.is_admin = True
+    user1 = User('kelvin','kelvin',False,True,False,None)
+    user2 = User('kk','kelvin',False,False,True,1)
+    user3 = User('admin','admin',True,False,False,None)
 
     # Create sample courses
-    course1 = Course(course_code='CS101', course_name='Introduction to Computer Science', credits=3)
-    course2 = Course(course_code='MATH101', course_name='Calculus I', credits=4)
+    course1 = Course(program_id=1,course_code='CS101', course_name='Introduction to Computer Science', credits=3)
+    course2 = Course(program_id=1,course_code='MATH101', course_name='Calculus I', credits=4)
 
     # Create sample programs
-    program1 = Program(program_name='Bachelor of Science in Computer Science', duration_years=4)
-    program2 = Program(program_name='Bachelor of Science in Mathematics', duration_years=4)
+    program1 = Program(program_name='Bachelor of Science in Computer Science')
+    program2 = Program(program_name='Bachelor of Science in Mathematics')
 
-    # Add relationships
-    student1.courses.append(course1)
-    student2.courses.append(course2)
-    lecturer1.courses.append(course1)
+    class1 = Class(program=program1, group="A", year_group="2024/2025")
+    # Add class1 to user1's teaching classes
+    user1.teaching_classes.append(class1)
+    
+
+    # Create sample students
+    student1 = Student(class_id=2,firstname="Kelvin",lastname="Lamptey",student_id="2425402472")
+    student2 = Student(class_id=2,firstname="Nii",lastname="Odartey",student_id="2425402473")
+
+    # # Add properties
+    student1.face_encodeing = "sth"
+    student2.face_encoding = "sth2"
 
     # Add all instances to the session
-    db.session.add_all([user1, user2, user3, student1, student2, lecturer1, course1, course2, program1, program2])
-
+    db.session.add_all([user1, user2, user3, student1, student2, course1, course2, program1, program2])
     # Commit the session to save the data to the database
     db.session.commit()
+
+
+def init_data():
+    with app.app_context():
+        
+        # Add sample data into the tables
+        populate_db()
+        
+        print("Sample data loaded into database!")
+
+if __name__ == '__main__':
+    init_data() 
+

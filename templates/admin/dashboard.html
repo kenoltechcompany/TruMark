@@ -6,7 +6,7 @@
         <h1 class="text-2xl font-bold">Welcome, {{ current_user.username }}</h1>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-{{ 4 if current_user.is_admin else 2}} gap-6">
         <div class="bg-white shadow rounded-lg p-4">
             <h5 class="text-lg font-semibold">Students</h5>
             <p class="mt-2">Total: {{ students_count }}</p>
@@ -22,7 +22,7 @@
                 Manage Sessions
             </a>
         </div>
-        
+        {% if current_user.is_admin %}
         <div class="bg-white shadow rounded-lg p-4">
             <h5 class="text-lg font-semibold">Classrooms</h5>
             <p class="mt-2">Total: {{ classrooms_count }}</p>
@@ -55,6 +55,7 @@
             </a>
         </div>
     </div>
+        {% endif %}
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
         <div class="bg-white shadow rounded-lg">
@@ -62,6 +63,7 @@
                 <h2 class="text-xl font-semibold">Recent Sessions</h2>
             </div>
             <div class="p-4">
+                {% if not recent_sessions %}No sessions created yet!{% endif %}
                 <ul class="divide-y divide-gray-200">
                     {% for session in recent_sessions %}
                     <li class="py-2">
@@ -77,10 +79,11 @@
                 <h2 class="text-xl font-semibold">Recent Students</h2>
             </div>
             <div class="p-4">
+                {% if not recent_students %}No students created yet!{% endif %}
                 <ul class="divide-y divide-gray-200">
                     {% for student in recent_students %}
                     <li class="py-2">
-                        {{ student.name }} ({{ student.student_id }})
+                        <a class="mt-4 block px-4 py-2 rounded" href="/admin/students#{{ student.student_id}}">{{ student.firstname }} - {{ student.student_id }}</a>
                     </li>
                     {% endfor %}
                 </ul>

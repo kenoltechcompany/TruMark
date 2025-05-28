@@ -32,7 +32,7 @@
                 {% if student_name != 'Unknown' %}
                     {{ student_name }} - {{ datetime.now().strftime('%b %d, %Y %I:%M %p') }}
                 {% else %}
-                    Biometric verification required
+                    Verification failed
                 {% endif %}
             </p>
 
@@ -47,10 +47,18 @@
                     </span>
                 </div>
             </div>
-
+            {% if current_user.is_admin %}
             <a href="/" class="inline-block w-full px-4 py-2.5 bg-academic-blue text-white rounded-lg hover:bg-academic-secondary transition-colors">
                 Return to Dashboard
             </a>
+            {% endif %}
+            <br/>
+            <br/>
+            {% if student_name == 'Unknown' %}
+            <a href="{{ url_for('session_attendance', session_id=session_id) }}" class="inline-block w-full px-4 py-2.5 bg-academic-blue text-white rounded-lg hover:bg-academic-primary transition-colors">
+                Return to Attendance
+            </a>
+            {% endif %}
         </div>
     </div>
 </div>

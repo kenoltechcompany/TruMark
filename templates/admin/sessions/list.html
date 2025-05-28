@@ -24,20 +24,27 @@
                     <tbody class="bg-white divide-y divide-gray-200">
                         {% for session in sessions %}
                         <tr>
-                            <td class="px-6 py-4 whitespace-nowrap">{{ session.name }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ session.course.course_name }} - Week {{ session.week }} ,{{session.lecturer}}</td>
                             <td class="px-6 py-4 whitespace-nowrap">{{ session.date.strftime('%Y-%m-%d') }}</td>
                             <td class="px-6 py-4 whitespace-nowrap">{{ session.classroom.name }}</td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <a href="{{ url_for('attendance', session_id=session.id) }}" 
+                                <a href="{{ url_for('session_attendance', session_id=session.id) }}" 
                                    class="bg-blue-600 text-white px-3 py-1 rounded text-sm">
                                     View Attendance
+                                </a><br/>
+                                <a href="{{ url_for('attendance', session_id=session.id) }}" 
+                                   class="bg-green-600 text-white px-3 py-1 rounded text-sm">
+                                    Mark Attendance
                                 </a>
-                                {% if current_user.is_admin %}
+                                <button onclick="shareQRCodeHandler('{{ url_for('generate_qrcode', session_id=session.id) }}')" 
+                                        class="bg-purple-600 text-white px-3 py-1 rounded text-sm mt-1">
+                                    Share QR Code
+                                </button>
+                                </a><br/>
                                 <button class="bg-red-600 text-white px-2 py-1 rounded text-sm" 
                                         onclick="deleteSession({{ session.id }})">
                                     Delete
                                 </button>
-                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -49,6 +56,33 @@
 </div>
 
 <script>
+    function shareQRCodeHandler(qrCodeUrl) {
+        fetch(qrCodeUrl)
+            .then(response => response.blob())
+            .then(blob => {
+            const file = new File([blob], "qrcode.png", { type: blob.type });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                navigator.share({
+                title: 'Session QR Code',
+                text: 'Scan this QR code to mark attendance.',
+                files: [file]
+                }).catch((error) => {
+                // User cancelled or share failed
+                console.log('Sharing failed:', error);
+                });
+            } else {
+                // Fallback: open QR code in new tab
+                const qrCodeWindow = window.open(qrCodeUrl, '_blank', 'width=600,height=600');
+                if (!qrCodeWindow) {
+                alert('Please allow pop-ups for this site to view the QR code.');
+                }
+            }
+            })
+            .catch(error => {
+            console.error('Error fetching QR code:', error);
+            alert('Failed to fetch QR code image.');
+            });
+    }
 function deleteSession(id) {
     if (confirm('Are you sure you want to delete this session?')) {
         fetch(`/admin/sessions/delete/${id}`, {

@@ -25,7 +25,7 @@
             <tbody class="bg-white divide-y divide-gray-200">
                 {% for record in attendance_data %}
                 <tr>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ record.student.name }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">{{ record.student.firstname }} {{ record.student.lastname}}</td>
                     <td class="px-6 py-4 whitespace-nowrap">{{ record.student.student_id }}</td>
                     <td class="px-6 py-4 whitespace-nowrap">{{ record.attendance.timestamp.strftime('%I:%M %p') }}</td>
                     <td class="px-6 py-4">

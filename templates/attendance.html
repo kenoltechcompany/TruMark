@@ -129,11 +129,8 @@ async function startFaceDetection() {
                         status.textContent = 'Live face detected. Processing...';
                         status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
 
-                        // Automatically mark attendance after 1 second
                         clearInterval(faceCheckInterval);
-                        setTimeout(() => {
-                            markAttendance(result.detection);
-                        }, 1000);
+                        markAttendance(result.detection);
                     } else {
                         status.textContent = 'Please move your head slightly or blink...';
                         status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
@@ -196,7 +193,7 @@ async function markAttendance(detection) {
             video.srcObject.getTracks().forEach(track => track.stop());
 
             // Redirect to success page with location status
-            window.location.href = `/attendance/success/${encodeURIComponent(result.student_name)}?in_classroom=${result.in_classroom}`;
+            window.location.href = `/attendance/success/${encodeURIComponent(result.student_name)}?in_classroom=${result.in_classroom}&sessionid={{session.id}}`;
         }
     } catch (error) {
         console.error('Error:', error);

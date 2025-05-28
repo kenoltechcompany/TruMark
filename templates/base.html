@@ -4,10 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Academic Attendance System{% endblock %}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+    <!-- <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet"> -->
+    <script src="/static/js/tailwind.3.4.16.js"></script>
+    <script src="/static/js/tf.min.js"></script>
+    <script src="/static/js/face-api.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"></script> -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script> -->
+
     <!-- Academic color scheme -->
     <script>
         tailwind.config = {
@@ -34,7 +37,7 @@
         <div class="max-w-7xl mx-auto px-4">
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center">
-                    <a href="{{ url_for('index') }}" class="flex items-center">
+                    <a href="{{ url_for('admin_dashboard') }}" class="flex items-center">
                         <svg class="w-8 h-8 text-academic-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16M12 6v12m0-12l4 6 4-6"/>
                         </svg>
@@ -42,11 +45,12 @@
                     </a>
                     {% if current_user.is_authenticated %}
                     <div class="ml-10 flex space-x-4">
-                        {% if current_user.is_admin %}
                         <a href="{{ url_for('admin_dashboard') }}" 
                            class="{{ 'bg-academic-gold text-white' if request.endpoint == 'admin_dashboard' else 'text-academic-gold hover:text-white' }} px-3 py-2 rounded-md text-sm font-medium">
                             Dashboard
                         </a>
+                        {% if current_user.is_admin %}
+                        
                         <a href="{{ url_for('list_students') }}" 
                            class="{{ 'bg-academic-gold text-white' if request.endpoint and ('list_students' in request.endpoint or 'new_student' in request.endpoint or 'edit_student' in request.endpoint) else 'text-academic-gold hover:text-white' }} px-3 py-2 rounded-md text-sm font-medium">
                             Students

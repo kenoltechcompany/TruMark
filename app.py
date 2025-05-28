@@ -50,18 +50,20 @@ class Student(db.Model):
     class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
     _class = db.relationship('Class', backref='students')
 
+
 class Session(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    week = db.Column(db.String(100), nullable=False)
+    semester = db.Column(db.String(1), nullable=False)
+    week = db.Column(db.String(10), nullable=False)
     date = db.Column(db.DateTime, nullable=False)
     classroom_id = db.Column(db.Integer, db.ForeignKey('classroom.id'), nullable=False)
-    class_ = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
+    sclass = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
     lecturer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False)
-    
     classroom = db.relationship('Classroom', backref='sessions')
     lecturer = db.relationship('User', backref='sessions')
+    course = db.relationship('Course', backref='sessions')
 
 class Attendance(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -75,20 +77,20 @@ class Attendance(db.Model):
 class Program(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     program_name = db.Column(db.String(100), nullable=False)
-    # duration_years = db.Co`l`umn(db.Integer, nullable=False)
 
 class Course(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     course_name = db.Column(db.String(100), nullable=False)
     course_code = db.Column(db.String(10), unique=True, nullable=False)
     credits = db.Column(db.Integer, nullable=False)
+    program_id = db.Column(db.Integer, db.ForeignKey('program.id'), nullable=False)
+    program = db.relationship('Program', backref='courses')
 
 class Class(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
     program_id = db.Column(db.Integer, db.ForeignKey('program.id'), nullable=False)
-    group = db.Column(db.String(1), nullable=False)
-    year = db.Column(db.Integer, nullable=False)
+    group = db.Column(db.String(2), nullable=False)
+    year_group = db.Column(db.String(10), nullable=False)
     program = db.relationship('Program', backref='classes')
 
 class Classroom(db.Model):
@@ -102,14 +104,18 @@ class Classroom(db.Model):
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    firstname = db.Column(db.String(80), nullable=True)
+    lastname = db.Column(db.String(80), nullable=True)
+    othernames = db.Column(db.String(80), nullable=True)
     password = db.Column(db.String(120), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     is_rep = db.Column(db.Boolean, default=False)
     is_lecturer = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=True)
-    class_ = db.relationship('Class', backref='representatives', foreign_keys=[class_id])
+    uclass = db.relationship('Class', backref='representatives', foreign_keys=[class_id])
     
+
     # Add teaching classes relationship for lecturers
     teaching_classes = db.relationship('Class', secondary='lecturer_classes',
                                      backref=db.backref('lecturers', lazy='dynamic'))
@@ -122,6 +128,7 @@ class User(UserMixin, db.Model):
         self.is_rep = is_rep
         if is_rep and class_id:  # Only set class_id if user is a class rep
             self.class_id = class_id
+        pass
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -167,10 +174,7 @@ def login():
             
             if user and user.check_password(password):
                 login_user(user)
-                if user.is_admin:
-                    return redirect(url_for('admin_dashboard'))
-                else:
-                    return redirect(url_for('user_dashboard'))
+                return redirect(url_for('admin_dashboard'))
             else:
                 flash('Invalid username or password')
             return redirect(url_for('login'))
@@ -197,8 +201,8 @@ def index():
 @app.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
-    if not current_user.is_admin:
-        return redirect(url_for('user_dashboard'))
+    recent_sessions = Session.query.order_by(Session.created_at.desc()).limit(5).all()
+    recent_students = Student.query.order_by(Student.created_at.desc()).limit(5).all()
     
     return render_template('admin/dashboard.html',
         students_count=Student.query.count(),
@@ -206,29 +210,16 @@ def admin_dashboard():
         classrooms_count=Classroom.query.count(),
         users_count=User.query.count(),
         programs_count=Program.query.count(),
-        courses_count=Course.query.count()
+        courses_count=Course.query.count(),
+        recent_sessions=recent_sessions,
+        recent_students=recent_students,
     )
 
-# Add new regular user dashboard route
-@app.route('/dashboard')
-@login_required
-def user_dashboard():
-    students_count = Student.query.count()
-    sessions_count = Session.query.count()
-    
-    recent_sessions = Session.query.order_by(Session.created_at.desc()).limit(5).all()
-    recent_students = Student.query.order_by(Student.created_at.desc()).limit(5).all()
-    
-    return render_template('dashboard.html',
-                         students_count=students_count,
-                         sessions_count=sessions_count,
-                         recent_sessions=recent_sessions,
-                         recent_students=recent_students)
 
 @app.route('/admin', methods=['GET', 'POST'])
 @csrf.exempt
 def admin_rediret():
-    redirect("/admin/dashboard")
+    return redirect("/admin/dashboard")
 @app.route('/admin/students/new', methods=['GET', 'POST'])
 @csrf.exempt
 def new_student():
@@ -279,30 +270,31 @@ def new_student():
             return jsonify({'success': False, 'error': str(e)}), 400
     
     classes = Class.query.all()
-    return render_template('admin/new_student.html', classes=classes)
+    return render_template('admin/students/new.html', classes=classes)
 
 @app.route('/admin/sessions/new', methods=['GET', 'POST'])
 @login_required
 def new_session():
-    if not current_user.is_admin and not current_user.is_rep:
+
+    if not current_user.is_admin and not current_user.is_rep and not current_user.is_lecturer:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     if request.method == 'POST':
         # For class reps, use their assigned class
-        class_id = current_user.class_id if current_user.is_rep else request.form['class_id']
-        
+        lecturer = User.query.get(request.form['lecturer_id'])
+        class_id = int(current_user.class_id if current_user.is_rep else request.form['class_id'])
         session = Session(
+            semester=request.form['semester'],
             week=request.form['week'],
             date=datetime.strptime(request.form['date'], '%Y-%m-%d'),
             classroom_id=request.form['classroom_id'],
-            class_=class_id,
+            sclass=class_id,
             course_id=request.form['course_id'],
             lecturer_id=request.form['lecturer_id']
         )
         
         # Verify lecturer teaches this class
-        lecturer = User.query.get(request.form['lecturer_id'])
         if class_id not in [c.id for c in lecturer.teaching_classes]:
             flash('Selected lecturer does not teach this class', 'error')
             return redirect(url_for('new_session'))
@@ -319,9 +311,10 @@ def new_session():
     if current_user.is_admin:
         classes = Class.query.all()
         lecturers = User.query.filter_by(is_lecturer=True).all()
+
     else:
         # For class reps, only show their class and its assigned lecturers
-        classes = [current_user.class_]
+        classes = [current_user.uclass]
         lecturers = User.query.filter(
             User.is_lecturer == True,
             User.teaching_classes.any(id=current_user.class_id)
@@ -350,20 +343,22 @@ def find_matching_student(face_descriptor, threshold=0.35):
     face_descriptor = np.array(face_descriptor, dtype=np.float64)
     
     for student in students:
+        name = f"{student.firstname} {student.lastname}"
+        print(f"Processing student: {name}")
         try:
             # Parse the stored face encoding from JSON string to numpy array
             stored_descriptor = np.array(json.loads(student.face_encoding.strip("'")), dtype=np.float64)
             
             # Calculate distance
             distance = norm(face_descriptor - stored_descriptor)
-            print(f"Distance for {student.name}: {distance}")
+            print(f"Distance for {name}: {distance}")
             
             if distance < threshold and distance < best_distance:
                 best_distance = distance
                 best_match = student
                 
         except Exception as e:
-            print(f"Error processing student {student.name}: {str(e)}")
+            print(f"Error processing student {name}: {str(e)}")
             # Try to clean up the stored encoding and retry
             try:
                 # Remove any extra quotes and spaces
@@ -371,17 +366,17 @@ def find_matching_student(face_descriptor, threshold=0.35):
                 stored_descriptor = np.array(json.loads(cleaned_encoding), dtype=np.float64)
                 
                 distance = norm(face_descriptor - stored_descriptor)
-                print(f"Distance for {student.name} (after cleanup): {distance}")
+                print(f"Distance for {name} (after cleanup): {distance}")
                 
                 if distance < threshold and distance < best_distance:
                     best_distance = distance
                     best_match = student
             except Exception as e2:
-                print(f"Failed second attempt for {student.name}: {str(e2)}")
+                print(f"Failed second attempt for {name}: {str(e2)}")
                 continue
     
     if best_match:
-        print(f"\nBest match found: {best_match.name} with distance: {best_distance}")
+        print(f"\nBest match found: {best_match.firstname} with distance: {best_distance}")
     else:
         print("\nNo match found above threshold")
     
@@ -480,11 +475,14 @@ def mark_attendance():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/attendance/success/<studentname>')
+@app.route('/attendance/success/<studentname>/')
 def attendance_success(studentname):
     in_classroom = request.args.get('in_classroom', 'true').lower() == 'true'
+    session_id = request.args.get('sessionid', 0)
+    print(f"Session ID: {session_id}")
     return render_template('attendance_success.html', 
                          student_name=studentname, 
+                         session_id=session_id, 
                          datetime=datetime,
                          in_classroom=in_classroom)
 
@@ -512,9 +510,10 @@ def get_location_name(latitude, longitude):
 
 # Add this route to view session attendance
 @app.route('/admin/attendance/<int:session_id>')
+@login_required
 def session_attendance(session_id):
     session = Session.query.get_or_404(session_id)
-    
+
     # Query all attendance records for this session with student information
     attendance_records = db.session.query(
         Attendance, Student
@@ -564,14 +563,14 @@ def list_users():
         flash('Access denied')
         return redirect(url_for('admin_dashboard'))
     users = User.query.all()
-    return render_template('admin/users/list.html', students=users)
+    return render_template('admin/users/list.html', users=users)
 
 @app.route('/admin/users/new', methods=['GET', 'POST'])
 @login_required
 def new_user():
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     if request.method == 'POST':
         username = request.form['username']
@@ -649,16 +648,16 @@ def new_classroom():
             return jsonify({'success': False, 'error': str(e)}), 400
     
     # Render the form for adding a new classroom
-    return render_template('admin/new_classroom.html')
+    return render_template('admin/classrooms/new.html')
 
 @app.route('/admin/classrooms')
 @login_required
 def list_classrooms():
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     classrooms = Classroom.query.all()
-    return render_template('admin/classrooms.html', classrooms=classrooms)
+    return render_template('admin/classrooms/list.html', classrooms=classrooms)
 
 @app.route('/admin/classrooms/edit/<int:classroom_id>', methods=['GET', 'POST'])
 @csrf.exempt
@@ -692,7 +691,7 @@ def edit_classroom(classroom_id):
             return jsonify({'success': False, 'error': str(e)}), 400
     
     coordinates = json.loads(classroom.coordinates)
-    return render_template('admin/edit_classroom.html', classroom=classroom, coordinates=coordinates)
+    return render_template('admin/classrooms/edit.html', classroom=classroom, coordinates=coordinates)
 
 @app.route('/admin/classrooms/delete/<int:classroom_id>', methods=['POST'])
 @csrf.exempt
@@ -730,33 +729,33 @@ def generate_qrcode(session_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/students')
+@app.route('/admin/students')
 @login_required
 def list_students():
     students = Student.query.order_by(Student.created_at.desc()).all()
-    return render_template('students/list.html', students=students)
+    return render_template('admin/students/list.html', students=students)
 
 @app.route('/sessions')
 @login_required
 def list_sessions():
     sessions = Session.query.order_by(Session.date.desc()).all()
-    return render_template('sessions/list.html', sessions=sessions)
+    return render_template('admin/sessions/list.html', sessions=sessions)
 
 @app.route('/admin/programs')
 @login_required
 def list_programs():
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     programs = Program.query.all()
-    return render_template('admin/programs.html', programs=programs)
+    return render_template('admin/programs/list.html', programs=programs)
 
 @app.route('/admin/programs/new', methods=['GET', 'POST'])
 @login_required
 def new_program():
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     if request.method == 'POST':
         program = Program(
@@ -775,16 +774,16 @@ def new_program():
 def list_courses():
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     courses = Course.query.all()
-    return render_template('admin/courses.html', courses=courses)
+    return render_template('admin/courses/list.html', courses=courses)
 
 @app.route('/admin/courses/new', methods=['GET', 'POST'])
 @login_required
 def new_course():
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     if request.method == 'POST':
         course = Course(
@@ -804,7 +803,7 @@ def new_course():
 def edit_program(program_id):
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     program = Program.query.get_or_404(program_id)
     
@@ -822,7 +821,7 @@ def edit_program(program_id):
 def edit_course(course_id):
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     course = Course.query.get_or_404(course_id)
     
@@ -841,16 +840,16 @@ def edit_course(course_id):
 def list_classes():
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     classes = Class.query.all()
-    return render_template('admin/classes.html', classes=classes)
+    return render_template('admin/classes/list.html', classes=classes)
 
 @app.route('/admin/classes/new', methods=['GET', 'POST'])
 @login_required
 def new_class():
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     if request.method == 'POST':
         class_ = Class(
@@ -872,7 +871,7 @@ def new_class():
 def edit_class(class_id):
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     class_ = Class.query.get_or_404(class_id)
     
@@ -893,7 +892,7 @@ def edit_class(class_id):
 def delete_class(class_id):
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     try:
         class_ = Class.query.get_or_404(class_id)
@@ -915,7 +914,7 @@ def delete_class(class_id):
 def edit_session(session_id):
     if not current_user.is_admin:
         flash('Access denied')
-        return redirect(url_for('user_dashboard'))
+        return redirect(url_for('admin_dashboard'))
     
     session = Session.query.get_or_404(session_id)
     
@@ -938,7 +937,7 @@ def edit_session(session_id):
 # Add new association table for lecturer-class relationship
 lecturer_classes = db.Table('lecturer_classes',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
-    db.Column('class_id', db.Integer, db.ForeignKey('class.id'), primary_key=True)
+    db.Column('class_id', db.Integer, db.ForeignKey('class.id'), primary_key=True),
 )
 
 if __name__ == '__main__':
