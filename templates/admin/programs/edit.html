@@ -15,13 +15,6 @@
                        value="{{ program.program_name }}"
                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
             </div>
-            
-            <div>
-                <label for="duration_years" class="block text-sm font-medium text-gray-700">Duration (Years)</label>
-                <input type="number" name="duration_years" id="duration_years" required min="1" max="6"
-                       value="{{ program.duration_years }}"
-                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-            </div>
 
             <div class="flex justify-end space-x-4">
                 <a href="{{ url_for('list_programs') }}" 

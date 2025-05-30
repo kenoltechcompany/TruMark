@@ -457,7 +457,7 @@ def mark_attendance():
     
         attendance = Attendance(
                 student_id=matched_student.id,
-            session_id=session_id,
+             session_id=session_id,
                 timestamp=datetime.now(),
             latitude=latitude,
             longitude=longitude
@@ -465,10 +465,12 @@ def mark_attendance():
         
         db.session.add(attendance)
         db.session.commit()
-    
+
+        name = f"{matched_student.firstname} {matched_student.othernames} {matched_student.lastname}"
+
         return jsonify({
             'message': 'Attendance marked successfully',
-            'student_name': matched_student.name,
+            'student_name': name,
             'in_classroom': is_in_classroom,
             'altitude_check': altitude_ok
         })
@@ -760,7 +762,6 @@ def new_program():
     if request.method == 'POST':
         program = Program(
             program_name=request.form['program_name'],
-            # duration_years=request.form['duration_years']
         )
         db.session.add(program)
         db.session.commit()
@@ -789,14 +790,15 @@ def new_course():
         course = Course(
             course_code=request.form['course_code'],
             course_name=request.form['course_name'],
-            credits=request.form['credits']
+            credits=request.form['credits'],
+            program_id=request.form['program_id']
         )
         db.session.add(course)
         db.session.commit()
         flash('Course created successfully')
         return redirect(url_for('list_courses'))
-    
-    return render_template('admin/courses/new.html')
+    programs = Program.query.all()
+    return render_template('admin/courses/new.html', programs=programs)
 
 @app.route('/admin/programs/edit/<int:program_id>', methods=['GET', 'POST'])
 @login_required
@@ -829,11 +831,27 @@ def edit_course(course_id):
         course.course_code = request.form['course_code']
         course.course_name = request.form['course_name']
         course.credits = request.form['credits']
+        course.program_id = request.form['program_id']
         db.session.commit()
         flash('Course updated successfully')
         return redirect(url_for('list_courses'))
+    programs = Program.query.all()
+    return render_template('admin/courses/edit.html', course=course, programs=programs)
     
-    return render_template('admin/courses/edit.html', course=course)
+@app.route('/admin/courses/delete/<int:course_id>', methods=['POST'])
+@login_required
+def delete_course(course_id):
+    print(f"Deleting course with ID: {course_id}")
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('admin_dashboard'))
+    try:
+        course = Course.query.get_or_404(course_id)
+        db.session.delete(course)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Course deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/admin/classes')
 @login_required
@@ -853,10 +871,9 @@ def new_class():
     
     if request.method == 'POST':
         class_ = Class(
-            name=request.form['name'],
             program_id=request.form['program_id'],
             group=request.form['group'],
-            year=request.form['year']
+            year_group=request.form['year_group']
         )
         db.session.add(class_)
         db.session.commit()
@@ -876,10 +893,9 @@ def edit_class(class_id):
     class_ = Class.query.get_or_404(class_id)
     
     if request.method == 'POST':
-        class_.name = request.form['name']
         class_.program_id = request.form['program_id']
         class_.group = request.form['group']
-        class_.year = request.form['year']
+        class_.year_group = request.form['year_group']
         db.session.commit()
         flash('Class updated successfully')
         return redirect(url_for('list_classes'))

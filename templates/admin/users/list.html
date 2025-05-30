@@ -15,29 +15,30 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th>Username</th>
-                            <th>Created At</th>
-                            <th>Roles</th>
-                            <th>Class</th>
-                            <th>Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roles</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         {% for user in users %}
                         <tr>
-                            <td>{{ user.username }}</td>
-                            <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                            <td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ user.username }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
                                 {% if user.is_admin %}Admin{% endif %}
                                 {% if user.is_lecturer %}{% if user.is_admin %}, {% endif %}Lecturer{% endif %}
                                 {% if user.is_rep %}{% if user.is_admin or user.is_lecturer %}, {% endif %}Class Rep{% endif %}
                             </td>
-                            <td>
-                                {% if user.is_rep and user.class_ %}
-                                    {{ user.class_.name }} - Group {{ user.class_.group }}
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                {% if user.is_rep and user.uclass %}
+                                    <!-- Create a short form for each program in the database and show that instead -->
+                                    {{ user.uclass.program.program_name }} - Group {{ user.uclass.group }}
                                 {% endif %}
                             </td>
-                            <td>
+                            <td class="px-6 py-4 whitespace-nowrap">
                                 <button class="bg-red-600 text-white px-2 py-1 rounded text-sm" 
                                         onclick="deleteUser({{ user.id }})">
                                     Delete
