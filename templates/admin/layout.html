@@ -2,8 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <title>TruMark Admin Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
@@ -12,7 +11,7 @@
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <a class="text-white font-bold text-xl" href="{{ url_for('admin_dashboard' if current_user.is_admin else 'user_dashboard') }}">
-                        {{ 'Admin Dashboard' if current_user.is_admin else 'User Dashboard' }}
+                        {{ 'TruMark Admin' if current_user.is_admin else 'TruMark Dashboard' }}
                     </a>
                     <div class="ml-10 flex space-x-4">
                         {% if current_user.is_admin %}

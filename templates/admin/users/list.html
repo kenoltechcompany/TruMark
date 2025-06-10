@@ -37,8 +37,11 @@
                                     <!-- Create a short form for each program in the database and show that instead -->
                                     {{ user.uclass.program.program_name }} - Group {{ user.uclass.group }}
                                 {% endif %}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
+                            </td>                            <td class="px-6 py-4 whitespace-nowrap space-x-2">
+                                <a href="{{ url_for('edit_user', user_id=user.id) }}" 
+                                   class="bg-blue-600 text-white px-2 py-1 rounded text-sm inline-block">
+                                    Edit
+                                </a>
                                 <button class="bg-red-600 text-white px-2 py-1 rounded text-sm" 
                                         onclick="deleteUser({{ user.id }})">
                                     Delete

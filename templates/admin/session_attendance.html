@@ -8,7 +8,11 @@
         <a href="{{ url_for('admin_dashboard') }}" class="text-blue-600 hover:text-blue-800">
             &larr; Back to Dashboard
         </a>
-        <h1 class="text-3xl font-bold mt-2">Attendance Records for {{ session.name }}</h1>
+        {% if current_user.is_rep %}
+        <h1 class="text-3xl font-bold mt-2">Attendance Records for {{ session.course.course_name }} - Week {{ session.week}}</h1>
+        {% else %}
+        <h1 class="text-3xl font-bold mt-2">Attendance Records for {{ session.course.course_name }} - Week {{ session.week}} || {{session.sclass.program.program_name}} Group {{session.sclass.group}}</h1>
+        {% endif %}
         <p class="text-gray-600">Date: {{ session.date.strftime('%Y-%m-%d') }}</p>
     </div>
 
@@ -19,7 +23,6 @@
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -28,12 +31,6 @@
                     <td class="px-6 py-4 whitespace-nowrap">{{ record.student.firstname }} {{ record.student.lastname}}</td>
                     <td class="px-6 py-4 whitespace-nowrap">{{ record.student.student_id }}</td>
                     <td class="px-6 py-4 whitespace-nowrap">{{ record.attendance.timestamp.strftime('%I:%M %p') }}</td>
-                    <td class="px-6 py-4">
-                        <div class="text-sm text-gray-900">{{ record.location }}</div>
-                        <div class="text-xs text-gray-500">
-                            ({{ "%.6f"|format(record.attendance.latitude) }}, {{ "%.6f"|format(record.attendance.longitude) }})
-                        </div>
-                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

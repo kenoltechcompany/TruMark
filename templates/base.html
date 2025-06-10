@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Academic Attendance System{% endblock %}</title>
+    <title>{% block title %}TruMark Attendance System{% endblock %}</title>
     <!-- <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet"> -->
     <script src="/static/js/tailwind.3.4.16.js"></script>
     <script src="/static/js/tf.min.js"></script>
@@ -41,7 +41,7 @@
                         <svg class="w-8 h-8 text-academic-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16M12 6v12m0-12l4 6 4-6"/>
                         </svg>
-                        <span class="ml-2 text-white text-xl font-academic">Academic Attendance</span>
+                        <span class="ml-2 text-white text-xl font-academic">TruMark</span>
                     </a>
                     {% if current_user.is_authenticated %}
                     <div class="ml-10 flex space-x-4">
@@ -86,9 +86,12 @@
                     </div>
                     {% endif %}
                 </div>
-                <div class="flex items-center space-x-4">
-                    {% if current_user.is_authenticated %}
+                <div class="flex items-center space-x-4">                    {% if current_user.is_authenticated %}
                     <span class="text-academic-gold text-sm">{{ current_user.username }}</span>
+                    <a href="{{ url_for('edit_profile') }}" 
+                       class="{{ 'bg-academic-gold text-white' if request.endpoint == 'edit_profile' else 'text-academic-gold hover:text-white' }} px-3 py-2 rounded-md text-sm font-medium">
+                        Profile
+                    </a>
                     <a href="{{ url_for('logout') }}" 
                        class="text-academic-gold hover:text-white px-3 py-2 rounded-md text-sm font-medium">
                         Logout
@@ -132,7 +135,7 @@
                 </div>
                 <div class="mt-4 md:mt-0 md:order-1">
                     <p class="text-center text-base text-gray-300">
-                        &copy; 2024 Academic Attendance System. All rights reserved.
+                        &copy; 2024 TruMark Attendance System. All rights reserved.
                     </p>
                 </div>
             </div>

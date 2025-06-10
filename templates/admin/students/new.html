@@ -33,17 +33,22 @@
                        class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-academic-blue focus:ring-2 focus:ring-academic-blue/20 transition">
             </div>
             <!-- New Class Selection Field -->
-            <div>
-                <label for="class_id" class="block text-sm font-medium text-gray-700">Class</label>
+            <div>                <label for="class_id" class="block text-sm font-medium text-gray-700">Class</label>
                 <select name="class_id" id="class_id" required
-                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    <option value="">Select a Class</option>
+                        {% if user_role.is_rep %}disabled{% endif %}
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 {% if user_role.is_rep %}bg-gray-100{% endif %}">
+                    {% if not user_role.is_rep %}<option value="">Select a Class</option>{% endif %}
                     {% for class in classes %}
-                    <option value="{{ class.id }}">
-                        {{ class.name }} - {{ class.program.program_name }} (Year {{ class.year }}, Group {{ class.group }})
+                    <option value="{{ class.id }}" 
+                            {% if user_role.is_rep and class.id == user_role.rep_class_id %}selected{% endif %}>
+                        {{ class.program.program_name }} - Group {{ class.group }} ({{ class.year_group }})
                     </option>
                     {% endfor %}
                 </select>
+                {% if user_role.is_rep %}
+                <input type="hidden" name="class_id" value="{{ user_role.rep_class_id }}">
+                <p class="mt-1 text-sm text-gray-500">Class is automatically set to your assigned class.</p>
+                {% endif %}
             </div>
         </div>
 

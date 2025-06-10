@@ -78,10 +78,14 @@ class Program(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     program_name = db.Column(db.String(100), nullable=False)
 
+    def get_short_name(self):
+        # Return a short name for the program, e.g., first 3 letters of each word
+        return ' '.join(word[:3] for word in self.program_name.split())
+
 class Course(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     course_name = db.Column(db.String(100), nullable=False)
-    course_code = db.Column(db.String(10), unique=True, nullable=False)
+    course_code = db.Column(db.String(15), unique=True, nullable=False)
     credits = db.Column(db.Integer, nullable=False)
     program_id = db.Column(db.Integer, db.ForeignKey('program.id'), nullable=False)
     program = db.relationship('Program', backref='courses')
@@ -251,7 +255,6 @@ def new_student():
             
             # Store as a clean JSON string
             face_encoding = json.dumps(face_descriptor)
-            print(data)
             student = Student(
                 student_id=student_id,
                 firstname=data.get('firstname', 'Unknown'),
@@ -268,9 +271,22 @@ def new_student():
         except Exception as e:
             print(f"Error saving student: {str(e)}")
             return jsonify({'success': False, 'error': str(e)}), 400
+      # Handle class list based on user role
+    if current_user.is_admin:
+        classes = Class.query.all()
+    elif current_user.is_lecturer:
+        classes = current_user.teaching_classes
+    else:  # for class reps
+        classes = [current_user.uclass] if current_user.uclass else []
     
-    classes = Class.query.all()
-    return render_template('admin/students/new.html', classes=classes)
+    return render_template('admin/students/new.html', 
+                         classes=classes,
+                         user_role={
+                             'is_admin': current_user.is_admin,
+                             'is_lecturer': current_user.is_lecturer,
+                             'is_rep': current_user.is_rep,
+                             'rep_class_id': current_user.class_id
+                         })
 
 @app.route('/admin/sessions/new', methods=['GET', 'POST'])
 @login_required
@@ -421,6 +437,31 @@ def mark_attendance():
         # Get the session and its classroom
         session = Session.query.get_or_404(session_id)
         classroom = Classroom.query.get_or_404(session.classroom_id)
+        
+        # First, find the matching student
+        matched_student = find_matching_student(face_descriptor)
+        if not matched_student:
+            return jsonify({
+                'error': 'User not recognized',
+                'student_name': 'Unknown'
+            }), 200        # Check if student belongs to the class of this session
+        if matched_student.class_id != session.sclass:
+            return jsonify({
+                'error': f'Access denied: {matched_student.firstname} {matched_student.lastname} is not registered in this class',
+                'student_name': f'{matched_student.firstname} {matched_student.lastname}'
+            }), 200
+
+        # Check if student has already marked attendance for this session
+        existing_attendance = Attendance.query.filter_by(
+            student_id=matched_student.id,
+            session_id=session_id
+        ).first()
+        
+        if existing_attendance:
+            return jsonify({
+                'error': f'Attendance already marked for {matched_student.firstname} {matched_student.lastname}',
+                'student_name': f'{matched_student.firstname} {matched_student.lastname}'
+            }), 200
         
         # Parse classroom coordinates
         classroom_coords = json.loads(classroom.coordinates)
@@ -573,11 +614,11 @@ def new_user():
     if not current_user.is_admin:
         flash('Access denied')
         return redirect(url_for('admin_dashboard'))
-    
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
         is_rep = bool(request.form.get('is_rep'))
+        is_lecturer = bool(request.form.get('is_lecturer'))
         class_id = request.form.get('class_id') if is_rep else None
         
         # Check if username already exists
@@ -590,17 +631,28 @@ def new_user():
             flash('Class selection is required for class representatives', 'error')
             return redirect(url_for('new_user'))
         
+        # For lecturers, validate teaching classes selection
+        teaching_class_ids = request.form.getlist('teaching_classes') if is_lecturer else []
+        if is_lecturer and not teaching_class_ids:
+            flash('At least one teaching class must be selected for lecturers', 'error')
+            return redirect(url_for('new_user'))
+        
         user = User(
             username=username,
             password=password,
             is_admin=bool(request.form.get('is_admin')),
-            is_lecturer=bool(request.form.get('is_lecturer')),
+            is_lecturer=is_lecturer,
             is_rep=is_rep,
             class_id=class_id if is_rep else None
         )
-        
         try:
             db.session.add(user)
+            
+            # If user is a lecturer, add teaching classes
+            if is_lecturer and teaching_class_ids:
+                teaching_classes = Class.query.filter(Class.id.in_(teaching_class_ids)).all()
+                user.teaching_classes.extend(teaching_classes)
+            
             db.session.commit()
             flash('User created successfully')
             return redirect(url_for('list_users'))
@@ -955,6 +1007,111 @@ lecturer_classes = db.Table('lecturer_classes',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
     db.Column('class_id', db.Integer, db.ForeignKey('class.id'), primary_key=True),
 )
+
+@app.route('/admin/profile', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    if request.method == 'POST':
+        # Update personal information
+        current_user.firstname = request.form.get('firstname')
+        current_user.lastname = request.form.get('lastname')
+        current_user.othernames = request.form.get('othernames')
+        
+        try:
+            db.session.commit()
+            flash('Profile updated successfully', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('Error updating profile: ' + str(e), 'error')
+        
+        return redirect(url_for('edit_profile'))
+    
+    return render_template('admin/users/profile.html')
+
+@app.route('/admin/change-password', methods=['POST'])
+@login_required
+def change_password():
+    current_password = request.form.get('current_password')
+    new_password = request.form.get('new_password')
+    confirm_password = request.form.get('confirm_password')
+    
+    if not current_password or not new_password or not confirm_password:
+        flash('All password fields are required', 'error')
+        return redirect(url_for('edit_profile'))
+    
+    if not current_user.check_password(current_password):
+        flash('Current password is incorrect', 'error')
+        return redirect(url_for('edit_profile'))
+    
+    if new_password != confirm_password:
+        flash('New passwords do not match', 'error')
+        return redirect(url_for('edit_profile'))
+    
+    try:
+        current_user.set_password(new_password)
+        db.session.commit()
+        flash('Password changed successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error changing password: ' + str(e), 'error')
+    
+    return redirect(url_for('edit_profile'))
+
+@app.route('/admin/users/edit/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+def edit_user(user_id):
+    if not current_user.is_admin:
+        flash('Access denied')
+        return redirect(url_for('admin_dashboard'))
+    
+    user = User.query.get_or_404(user_id)
+    
+    if request.method == 'POST':
+        # Update basic info
+        user.firstname = request.form.get('firstname')
+        user.lastname = request.form.get('lastname')
+        user.othernames = request.form.get('othernames')
+        
+        # Update roles
+        user.is_admin = bool(request.form.get('is_admin'))
+        user.is_lecturer = bool(request.form.get('is_lecturer'))
+        user.is_rep = bool(request.form.get('is_rep'))
+        
+        # Update class for class rep
+        if user.is_rep:
+            class_id = request.form.get('class_id')
+            if not class_id:
+                flash('Class selection is required for class representatives', 'error')
+                return redirect(url_for('edit_user', user_id=user_id))
+            user.class_id = class_id
+        else:
+            user.class_id = None
+        
+        # Update teaching classes for lecturer
+        if user.is_lecturer:
+            teaching_class_ids = request.form.getlist('teaching_classes')
+            if not teaching_class_ids:
+                flash('At least one teaching class must be selected for lecturers', 'error')
+                return redirect(url_for('edit_user', user_id=user_id))
+            
+            # Clear existing teaching classes and add new ones
+            user.teaching_classes = []
+            teaching_classes = Class.query.filter(Class.id.in_(teaching_class_ids)).all()
+            user.teaching_classes.extend(teaching_classes)
+        else:
+            user.teaching_classes = []
+        
+        try:
+            db.session.commit()
+            flash('User updated successfully')
+            return redirect(url_for('list_users'))
+        except Exception as e:
+            db.session.rollback()
+            flash('Error updating user: ' + str(e), 'error')
+            return redirect(url_for('edit_user', user_id=user_id))
+    
+    classes = Class.query.all()
+    return render_template('admin/users/edit.html', user=user, classes=classes)
 
 if __name__ == '__main__':
     with app.app_context():

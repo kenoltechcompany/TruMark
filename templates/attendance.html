@@ -176,15 +176,32 @@ async function markAttendance(detection) {
             })
         });
 
-        const result = await response.json();
-        if (result.error) {
+        const result = await response.json();        if (result.error) {
             status.textContent = result.error;
-            status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
             
-            // Restart face detection after 2 seconds if user not recognized
-            setTimeout(() => {
-                startFaceDetection();
-            }, 2000);
+            if (result.error.includes('already marked')) {
+                // If attendance was already marked, show in blue
+                status.className = 'text-center text-lg mb-4 p-2 bg-blue-100 text-blue-700';
+                
+                // Redirect to success page after 2 seconds
+                setTimeout(() => {
+                    window.location.href = `/attendance/success/${encodeURIComponent(result.student_name)}?in_classroom=true&sessionid={{session.id}}`;
+                }, 2000);
+            } else if (result.error.includes('Access denied')) {
+                // If student is not in this class, show in red
+                status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
+                
+                // Just stop face detection for wrong class
+                video.srcObject.getTracks().forEach(track => track.stop());
+            } else {
+                // For other errors (like unrecognized user), show in yellow
+                status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
+                
+                // Restart face detection after 2 seconds if user not recognized
+                setTimeout(() => {
+                    startFaceDetection();
+                }, 2000);
+            }
         } else {
             status.textContent = `Attendance marked successfully for ${result.student_name}!`;
             status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';

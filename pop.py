@@ -32,6 +32,7 @@ def populate_db():
     # Add all instances to the session
     # db.session.add_all([user1, user2, user3, student1, student2, course1, course2, program1, program2])
     # Commit the session to save the data to the database
+    db.session.add(user3)
     db.session.commit()
 
 

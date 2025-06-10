@@ -39,16 +39,29 @@
                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                     <label for="is_rep" class="ml-2 block text-sm text-gray-700">Class Representative</label>
                 </div>
-            </div>
-
-            <div id="class_selection" style="display: none;">
+            </div>            <div id="class_selection" style="display: none;">
                 <label for="class_id" class="block text-sm font-medium text-gray-700">Class</label>
                 <select name="class_id" id="class_id"
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                     {% for class in classes %}
-                    <option value="{{ class.id }}">{{ class.name }} - Group {{ class.group }} (Year {{ class.year }})</option>
+                    <option value="{{ class.id }}">{{ class.program.get_short_name() }} Group {{ class.group}} || {{class.year_group}}</option>
                     {% endfor %}
                 </select>
+            </div>
+
+            <div id="teaching_classes_selection" style="display: none;">
+                <label class="block text-sm font-medium text-gray-700">Teaching Classes</label>
+                <div class="mt-2 space-y-2 max-h-60 overflow-y-auto border rounded-md p-3">
+                    {% for class in classes %}
+                    <div class="flex items-center">
+                        <input type="checkbox" name="teaching_classes" value="{{ class.id }}"
+                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <label class="ml-2 text-sm text-gray-700">
+                            {{ class.program.get_short_name() }} Group {{ class.group }} || {{ class.year_group }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
 
             <div class="flex justify-end space-x-4">
@@ -66,6 +79,18 @@
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add listener for rep checkbox
+    document.getElementById('is_rep').addEventListener('change', function() {
+        toggleClassSelection();
+    });
+
+    // Add listener for lecturer checkbox
+    document.getElementById('is_lecturer').addEventListener('change', function() {
+        toggleTeachingClassesSelection();
+    });
+});
+
 function toggleClassSelection() {
     const isRep = document.getElementById('is_rep').checked;
     const classSelection = document.getElementById('class_selection');
@@ -73,5 +98,27 @@ function toggleClassSelection() {
     const classInput = document.getElementById('class_id');
     classInput.required = isRep;
 }
+
+function toggleTeachingClassesSelection() {
+    const isLecturer = document.getElementById('is_lecturer').checked;
+    const teachingClassesSelection = document.getElementById('teaching_classes_selection');
+    teachingClassesSelection.style.display = isLecturer ? 'block' : 'none';
+    
+    // Remove the required attribute from individual checkboxes
+    const checkboxes = teachingClassesSelection.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(checkbox => checkbox.required = false);
+}
+
+// Add form validation to ensure at least one class is selected for lecturers
+document.querySelector('form').addEventListener('submit', function(e) {
+    const isLecturer = document.getElementById('is_lecturer').checked;
+    if (isLecturer) {
+        const selectedClasses = document.querySelectorAll('input[name="teaching_classes"]:checked').length;
+        if (selectedClasses === 0) {
+            e.preventDefault();
+            alert('Please select at least one teaching class for the lecturer');
+        }
+    }
+});
 </script>
 {% endblock %} 
