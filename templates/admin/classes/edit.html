@@ -6,7 +6,7 @@
         <h2 class="text-2xl font-bold">Edit Class</h2>
     </div>
 
-    <form method="POST" action="{{ url_for('edit_class', class_id=class_.id) }}">
+    <form method="POST" action="{{ url_for('edit_class', class_id=cur_class.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="space-y-4">            
             <div>
@@ -14,7 +14,7 @@
                 <select name="program_id" id="program_id" required
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                     {% for program in programs %}
-                    <option value="{{ program.id }}" {% if program.id == class_.program_id %}selected{% endif %}>
+                    <option value="{{ program.id }}" {% if program.id == cur_class.program_id %}selected{% endif %}>
                         {{ program.program_name }}
                     </option>
                     {% endfor %}
@@ -24,15 +24,26 @@
             <div>
                 <label for="group" class="block text-sm font-medium text-gray-700">Group</label>
                 <input type="text" name="group" id="group" required maxlength="1"
-                       value="{{ class_.group }}"
+                       value="{{ cur_class.group }}"
                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
             </div>
 
             <div>
                 <label for="year_group" class="block text-sm font-medium text-gray-700">Year Group</label>
-                <input type="text" name="year_group" id="year_group" required min="1" max="6"
-                       value="{{ class_.year_group }}"
+                <input type="text" name="year_group" id="year_group" required
+                       value="{{ cur_class.year_group }}"
                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            </div>
+            <div>
+                <label for="session_name" class="block text-sm font-medium text-gray-700">Session</label>
+                <select name="session_name" id="session_name" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    {% for session in sessions %}
+                    <option value="{{ session }}" {% if session == cur_class.session %}selected{% endif %}>
+                        {{ session }}
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
 
             <div class="flex justify-end space-x-4">

@@ -18,7 +18,15 @@
                     {% endfor %}
                 </select>
             </div>
-            
+            <div>
+                <label for="session_name" class="block text-sm font-medium text-gray-700">Session Name</label>
+                <select name="session_name" id="session_name" required
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="morning">Morning</option>
+                    <option value="evening">Evening</option>
+                    <option value="weekend">Weekend</option>
+                </select>
+            </div>
             <div>
                 <label for="group" class="block text-sm font-medium text-gray-700">Group</label>
                 <input type="text" name="group" id="group" required maxlength="1"

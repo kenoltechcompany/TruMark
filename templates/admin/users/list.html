@@ -33,9 +33,9 @@
                                 {% if user.is_rep %}{% if user.is_admin or user.is_lecturer %}, {% endif %}Class Rep{% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                {% if user.is_rep and user.uclass %}
+                                {% if user.is_rep and user.cur_class %}
                                     <!-- Create a short form for each program in the database and show that instead -->
-                                    {{ user.uclass.program.program_name }} - Group {{ user.uclass.group }}
+                                    {{ user.cur_class.program.program_name }} - Group {{ user.cur_class.group }}
                                 {% endif %}
                             </td>                            <td class="px-6 py-4 whitespace-nowrap space-x-2">
                                 <a href="{{ url_for('edit_user', user_id=user.id) }}" 

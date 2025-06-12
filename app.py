@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, send_file
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, send_file, Response
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import qrcode
 import os
+import csv
 from werkzeug.utils import secure_filename
 import base64
 from io import BytesIO
@@ -10,8 +11,6 @@ import numpy as np
 import json
 from numpy.linalg import norm
 from flask_wtf.csrf import CSRFProtect, generate_csrf
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_bcrypt import Bcrypt
 
@@ -48,7 +47,7 @@ class Student(db.Model):
     face_encoding = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
-    _class = db.relationship('Class', backref='students')
+    current_class = db.relationship('Class', backref='students')
 
 
 class Session(db.Model):
@@ -57,13 +56,15 @@ class Session(db.Model):
     week = db.Column(db.String(10), nullable=False)
     date = db.Column(db.DateTime, nullable=False)
     classroom_id = db.Column(db.Integer, db.ForeignKey('classroom.id'), nullable=False)
-    sclass = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
+    class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
     lecturer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False)
     classroom = db.relationship('Classroom', backref='sessions')
     lecturer = db.relationship('User', backref='sessions')
     course = db.relationship('Course', backref='sessions')
+    current_class = db.relationship('Class', backref='sessions')
+    active = db.Column(db.Boolean, default=True)
 
 class Attendance(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -96,6 +97,7 @@ class Class(db.Model):
     group = db.Column(db.String(2), nullable=False)
     year_group = db.Column(db.String(10), nullable=False)
     program = db.relationship('Program', backref='classes')
+    session = db.Column(db.String(10), nullable=False)  # e.g., "2023/2024"
 
 class Classroom(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -117,7 +119,7 @@ class User(UserMixin, db.Model):
     is_lecturer = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=True)
-    uclass = db.relationship('Class', backref='representatives', foreign_keys=[class_id])
+    current_class = db.relationship('Class', backref='representatives', foreign_keys=[class_id])
     
 
     # Add teaching classes relationship for lecturers
@@ -277,7 +279,7 @@ def new_student():
     elif current_user.is_lecturer:
         classes = current_user.teaching_classes
     else:  # for class reps
-        classes = [current_user.uclass] if current_user.uclass else []
+        classes = [current_user.cur_class] if current_user.cur_class else []
     
     return render_template('admin/students/new.html', 
                          classes=classes,
@@ -305,7 +307,7 @@ def new_session():
             week=request.form['week'],
             date=datetime.strptime(request.form['date'], '%Y-%m-%d'),
             classroom_id=request.form['classroom_id'],
-            sclass=class_id,
+            class_id=class_id,
             course_id=request.form['course_id'],
             lecturer_id=request.form['lecturer_id']
         )
@@ -330,7 +332,7 @@ def new_session():
 
     else:
         # For class reps, only show their class and its assigned lecturers
-        classes = [current_user.uclass]
+        classes = [current_user.cur_class]
         lecturers = User.query.filter(
             User.is_lecturer == True,
             User.teaching_classes.any(id=current_user.class_id)
@@ -445,7 +447,7 @@ def mark_attendance():
                 'error': 'User not recognized',
                 'student_name': 'Unknown'
             }), 200        # Check if student belongs to the class of this session
-        if matched_student.class_id != session.sclass:
+        if matched_student.class_id != session.class_id:
             return jsonify({
                 'error': f'Access denied: {matched_student.firstname} {matched_student.lastname} is not registered in this class',
                 'student_name': f'{matched_student.firstname} {matched_student.lastname}'
@@ -540,16 +542,6 @@ def delete_student(student_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
-# Add this function to get location name from coordinates
-def get_location_name(latitude, longitude):
-    try:
-        geolocator = Nominatim(user_agent="attendance_system")
-        location = geolocator.reverse(f"{latitude}, {longitude}", language='en')
-        return location.address if location else "Location not found"
-    except GeocoderTimedOut:
-        return "Location lookup timed out"
-    except Exception:
-        return "Location lookup failed"
 
 # Add this route to view session attendance
 @app.route('/admin/attendance/<int:session_id>')
@@ -569,11 +561,9 @@ def session_attendance(session_id):
     # Process attendance records to include location names
     attendance_data = []
     for attendance, student in attendance_records:
-        location_name = get_location_name(attendance.latitude, attendance.longitude)
         attendance_data.append({
             'student': student,
             'attendance': attendance,
-            'location': location_name
         })
     
     return render_template(
@@ -581,6 +571,51 @@ def session_attendance(session_id):
         session=session,
         attendance_data=attendance_data
     )
+
+@app.route('/admin/attendance/<int:session_id>/export')
+@login_required
+def export_attendance(session_id):
+    import csv
+    from io import StringIO
+    
+    session = Session.query.get_or_404(session_id)
+    
+    # Query all attendance records for this session with student information
+    attendance_records = db.session.query(
+        Attendance, Student
+    ).join(
+        Student, Attendance.student_id == Student.id
+    ).filter(
+        Attendance.session_id == session_id
+    ).order_by(Student.lastname).all()
+    
+    # Create a string buffer to write CSV data
+    si = StringIO()
+    cw = csv.writer(si)
+    
+    # Write header row
+    cw.writerow(['Student ID', 'First Name', 'Last Name', 'Other Names', 'Time'])
+    
+    # Write attendance data
+    for attendance, student in attendance_records:
+        cw.writerow([
+            student.student_id,
+            student.firstname,
+            student.lastname,
+            student.othernames,
+            attendance.timestamp.strftime('%Y-%m-%d %I:%M %p')
+        ])
+    
+    output = si.getvalue()
+    si.close()
+    
+    # Generate filename
+    filename = f"attendance_{session.course.course_name}_week{session.week}_{session.date.strftime('%Y%m%d')}.csv"
+    
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment;filename={filename}"})
 
 @app.route('/admin/sessions/delete/<int:session_id>', methods=['POST'])
 @csrf.exempt
@@ -922,12 +957,13 @@ def new_class():
         return redirect(url_for('admin_dashboard'))
     
     if request.method == 'POST':
-        class_ = Class(
+        cur_class = Class(
             program_id=request.form['program_id'],
             group=request.form['group'],
-            year_group=request.form['year_group']
+            year_group=request.form['year_group'],
+            session=request.form['session_name'],
         )
-        db.session.add(class_)
+        db.session.add(cur_class)
         db.session.commit()
         flash('Class created successfully')
         return redirect(url_for('list_classes'))
@@ -942,18 +978,20 @@ def edit_class(class_id):
         flash('Access denied')
         return redirect(url_for('admin_dashboard'))
     
-    class_ = Class.query.get_or_404(class_id)
+    cur_class = Class.query.get_or_404(class_id)
     
     if request.method == 'POST':
-        class_.program_id = request.form['program_id']
-        class_.group = request.form['group']
-        class_.year_group = request.form['year_group']
+        cur_class.program_id = request.form['program_id']
+        cur_class.group = request.form['group']
+        cur_class.year_group = request.form['year_group']
+        cur_class.session = request.form['session_name']
         db.session.commit()
         flash('Class updated successfully')
         return redirect(url_for('list_classes'))
     
     programs = Program.query.all()
-    return render_template('admin/classes/edit.html', class_=class_, programs=programs)
+    sessions = ['morning', 'evening', 'weekend']
+    return render_template('admin/classes/edit.html', cur_class=cur_class, programs=programs, sessions=sessions)
 
 @app.route('/admin/classes/delete/<int:class_id>', methods=['POST'])
 @login_required
