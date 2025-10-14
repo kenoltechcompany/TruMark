@@ -38,14 +38,35 @@ TruMark is a Flask-based web application for managing student attendance using f
     - Head turned right
     - Head tilted up
     - Head tilted down
-5.  After all 5 photos are captured, the user clicks "Complete Enrollment".
-6.  The frontend sends all 5 images to the backend `/admin/students/new` endpoint.
-7.  The backend:
+5.  Users can click on any captured photo to retake it
+6.  After all 5 photos are captured, the user clicks "Complete Enrollment".
+7.  The frontend sends all 5 images to the backend `/admin/students/new` endpoint.
+8.  The backend:
     - Saves the images to `uploads/student_{student_id}/`
     - Uses `face_recognition.face_encodings()` to extract face encodings from each image
     - Averages the encodings for better accuracy across angles
     - Stores the averaged encoding in `Student.face_encoding` as JSON
     - Stores the image paths in `Student.face_images` as JSON
+
+### Core Application Flow: Remote Student Registration
+
+1.  An admin, lecturer, or class rep navigates to `/admin/registration-tokens`
+2.  They click "Generate New Link" and select the target class
+    - For class reps: class is automatically locked to their assigned class
+    - For lecturers/admins: they choose from their accessible classes
+3.  The system generates a secure random token and creates a `RegistrationToken` record
+4.  The link is displayed with copy and share buttons (e.g., `/register/{token}`)
+5.  The creator shares the link with students (WhatsApp, email, etc.)
+6.  Students access the link and see the remote registration page
+7.  If the token `is_active` is True:
+    - Students fill in their details and capture 5 face photos (same as admin registration)
+    - The frontend sends data to `/api/remote-register/{token}`
+    - The backend validates the token, processes face images, and creates the student record
+    - The student is automatically assigned to the class associated with the token
+8.  If the token `is_active` is False:
+    - Students see a "Registration Closed" page with class info and contact instructions
+9.  Admins/lecturers/reps can toggle registration on/off using the switch in the tokens list
+10. Each class can have one active registration token at a time (reuses existing if present)
 
 ### Core Application Flow: Marking Attendance
 
@@ -103,3 +124,5 @@ The application includes a comprehensive session expiration system with multiple
 - **Templates:** The application uses a base template (`templates/admin/base.html`) which is extended by other pages. This provides a consistent layout.
 - **Face Encodings:** Face encodings are extracted server-side using the Python `face_recognition` library. During registration, 5 images from different angles are processed, and their encodings are averaged for robustness. The averaged encoding is stored as a JSON string in `Student.face_encoding`. The original images are saved in `uploads/student_{student_id}/` and their paths stored in `Student.face_images`. The `find_matching_student()` function uses `face_recognition.compare_faces()` with a tolerance parameter (default 0.6) to match faces.
 - **Configuration:** All configuration is managed in `config.py`. Sensitive data like database credentials should be loaded from a `.env` file and not hardcoded.
+
+- **Environment** Always us uv as the package manager and python runner. eg. instead of `python main.py`, you could `uv run main.py` or `uv run python main.py`. This is flask app so to test it use `uv run flask run --debug` instead running the `app.py` file directly like `uv run python app.py` which is better. Install packages with `uv`like this `uv add [package]` or `uv pip install [package]`, with `uv add` being the preferable option and falling to the latter when `uv add` fails

@@ -1,12 +1,56 @@
 {% extends 'base.html' %}
+{% from 'macros/pagination.html' import render_pagination %}
+{% from 'macros/filters.html' import render_search_bar, render_filter_dropdown %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 mt-4">
     <div class="flex justify-between items-center mb-4">
         <h2 class="text-2xl font-bold">Students</h2>
-        <a href="{{ url_for('new_student') }}" class="bg-blue-600 text-white px-4 py-2 rounded">
-            Add New Student
-        </a>
+        <div class="flex space-x-3">
+            <a href="{{ url_for('list_registration_tokens') }}" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                </svg>
+                Registration Links
+            </a>
+            <a href="{{ url_for('new_student') }}" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                Add New Student
+            </a>
+        </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <form id="filterForm" class="flex flex-wrap gap-4 items-end">
+            <!-- Search Bar -->
+            {{ render_search_bar(search, 'Search by ID, name...') }}
+            
+            <!-- Class Filter -->
+            <div class="flex flex-col">
+                <label for="class_id" class="text-sm font-medium text-gray-700 mb-1">Class</label>
+                <select id="class_id" name="class_id"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">All Classes</option>
+                    {% for class in classes %}
+                        <option value="{{ class.id }}" {% if class_filter == class.id|string %}selected{% endif %}>
+                            {{ class.program.program_name }} - Group {{ class.group }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="flex gap-2">
+                <button type="button" onclick="applyFilters()" 
+                        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    Apply
+                </button>
+                <button type="button" onclick="clearFilters()" 
+                        class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                    Clear
+                </button>
+            </div>
+        </form>
     </div>
 
     <div class="bg-white shadow rounded-lg">
@@ -19,41 +63,69 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firstname</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lastname</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Othernames</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                        {% for student in students %}
-                        <tr class="px-6 py-4 whitespace-nowrap" id="{{ student.student_id }}">
-                            <td class="px-6 py-4 whitespace-nowrap">{{ student.student_id }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">{{ student.firstname }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">{{ student.lastname }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">{{ student.othernames }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">{{ student.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <button class="bg-red-600 text-white px-2 py-1 rounded text-sm" 
-                                        onclick="deleteStudent({{ student.id }})">
-                                    Delete
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
+                        {% if students %}
+                            {% for student in students %}
+                            <tr class="px-6 py-4 whitespace-nowrap" id="{{ student.student_id }}">
+                                <td class="px-6 py-4 whitespace-nowrap">{{ student.student_id }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ student.firstname }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ student.lastname }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ student.othernames or '-' }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {% if student.current_class %}
+                                        {{ student.current_class.program.program_name }} - Group {{ student.current_class.group }}
+                                    {% else %}
+                                        <span class="text-gray-400">Not assigned</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ student.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <button class="bg-red-600 text-white px-2 py-1 rounded text-sm" 
+                                            onclick="deleteStudent({{ student.id }})">
+                                        Delete
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                                    No students found. Try adjusting your filters.
+                                </td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
+        
+        <!-- Pagination -->
+        {{ render_pagination(pagination, 'list_students', 
+                           search=search, 
+                           class_id=class_filter,
+                           per_page=per_page) }}
     </div>
 </div>
 
 <script>
+// Get CSRF token
+function getCsrfToken() {
+    return "{{ csrf_token() }}";
+}
+
 function deleteStudent(id) {
     if (confirm('Are you sure you want to delete this student?')) {
+        const formData = new FormData();
+        formData.append('csrf_token', getCsrfToken());
+        
         fetch(`/admin/students/delete/${id}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            body: formData
         })
         .then(response => response.json())
         .then(data => {
@@ -68,6 +140,31 @@ function deleteStudent(id) {
             alert('An error occurred while deleting the student');
         });
     }
+}
+
+// Apply filters on form submission
+function applyFilters() {
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+    const url = new URL(window.location);
+    
+    // Clear existing params
+    const searchParams = new URLSearchParams();
+    searchParams.set('page', '1'); // Reset to first page
+    
+    // Add form data to URL
+    for (let [key, value] of formData.entries()) {
+        if (value) {
+            searchParams.set(key, value);
+        }
+    }
+    
+    window.location.href = url.pathname + '?' + searchParams.toString();
+}
+
+// Clear all filters
+function clearFilters() {
+    window.location.href = window.location.pathname;
 }
 </script>
 {% endblock %}

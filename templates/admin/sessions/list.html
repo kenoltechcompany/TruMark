@@ -1,4 +1,6 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
+{% from 'macros/pagination.html' import render_pagination %}
+{% from 'macros/filters.html' import render_search_bar %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 mt-4">
@@ -7,6 +9,59 @@
         <a href="{{ url_for('new_session') }}" class="bg-blue-600 text-white px-4 py-2 rounded">
             Add New Session
         </a>
+    </div>
+
+    <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <form id="filterForm" class="flex flex-wrap gap-4 items-end">
+            {{ render_search_bar(search, 'Search by course, lecturer...') }}
+            
+            <div class="flex flex-col">
+                <label for="classroom_id" class="text-sm font-medium text-gray-700 mb-1">Classroom</label>
+                <select id="classroom_id" name="classroom_id"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">All Classrooms</option>
+                    {% for classroom in classrooms %}
+                        <option value="{{ classroom.id }}" {% if classroom_filter == classroom.id|string %}selected{% endif %}>
+                            {{ classroom.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex flex-col">
+                <label for="course_id" class="text-sm font-medium text-gray-700 mb-1">Course</label>
+                <select id="course_id" name="course_id"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">All Courses</option>
+                    {% for course in courses %}
+                        <option value="{{ course.id }}" {% if course_filter == course.id|string %}selected{% endif %}>
+                            {{ course.course_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex flex-col">
+                <label for="status" class="text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select id="status" name="status"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">All</option>
+                    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+                    <option value="expired" {% if status_filter == 'expired' %}selected{% endif %}>Expired</option>
+                </select>
+            </div>
+            
+            <div class="flex gap-2">
+                <button type="button" onclick="applyFilters()" 
+                        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    Apply
+                </button>
+                <button type="button" onclick="clearFilters()" 
+                        class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                    Clear
+                </button>
+            </div>
+        </form>
     </div>
 
     <div class="bg-white shadow rounded-lg">
@@ -23,103 +78,121 @@
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                        {% for session in sessions %}
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap">{{ session.course.course_name }} - Week {{ session.week }} ,{{session.lecturer}}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">{{ session.date.strftime('%Y-%m-%d') }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">{{ session.classroom.name }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                {% if session.is_expired() %}
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                        Expired
-                                    </span>
-                                {% else %}
-                                    {% if session.expiration_type == 'always_open' %}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            Always Open
+                        {% if sessions %}
+                            {% for session in sessions %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ session.course.course_name }} - Week {{ session.week }} ,{{session.lecturer}}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ session.date.strftime('%Y-%m-%d') }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">{{ session.classroom.name }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    {% if session.is_expired() %}
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            Expired
                                         </span>
                                     {% else %}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                            {{ session.get_expiration_display() }}
-                                        </span>
-                                    {% endif %}
-                                {% endif %}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="flex flex-wrap gap-2">
-                                    <a href="{{ url_for('session_attendance', session_id=session.id) }}" 
-                                       class="bg-blue-600 text-white px-3 py-1 rounded text-sm">
-                                        View Attendance
-                                    </a>
-                                    {% if not session.is_expired() %}
-                                        <a href="{{ url_for('attendance', session_id=session.id) }}" 
-                                           class="bg-green-600 text-white px-3 py-1 rounded text-sm">
-                                            Mark Attendance
-                                        </a>
-                                        <button onclick="shareQRCodeHandler('{{ url_for('generate_qrcode', session_id=session.id) }}')" 
-                                                class="bg-purple-600 text-white px-3 py-1 rounded text-sm">
-                                            Share QR Code
-                                        </button>
-                                        {% if session.expiration_type != 'always_open' %}
-                                            <button class="bg-orange-600 text-white px-3 py-1 rounded text-sm" 
-                                                    onclick="expireSession({{ session.id }})">
-                                                Expire Now
-                                            </button>
+                                        {% if session.expiration_type == 'always_open' %}
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                Always Open
+                                            </span>
+                                        {% else %}
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                {{ session.get_expiration_display() }}
+                                            </span>
                                         {% endif %}
-                                    {% else %}
-                                        <span class="text-gray-500 text-sm italic">Session has expired</span>
                                     {% endif %}
-                                    <button class="bg-red-600 text-white px-3 py-1 rounded text-sm" 
-                                            onclick="deleteSession({{ session.id }})">
-                                        Delete
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="flex flex-wrap gap-2">
+                                        <a href="{{ url_for('session_attendance', session_id=session.id) }}" 
+                                           class="bg-blue-600 text-white px-3 py-1 rounded text-sm">
+                                            View Attendance
+                                        </a>
+                                        {% if not session.is_expired() %}
+                                            <a href="{{ url_for('attendance', session_id=session.id) }}" 
+                                               class="bg-green-600 text-white px-3 py-1 rounded text-sm">
+                                                Mark Attendance
+                                            </a>
+                                            <button onclick="shareQRCodeHandler('{{ url_for('generate_qrcode', session_id=session.id) }}')" 
+                                                    class="bg-purple-600 text-white px-3 py-1 rounded text-sm">
+                                                Share QR Code
+                                            </button>
+                                            {% if session.expiration_type != 'always_open' %}
+                                                <button class="bg-orange-600 text-white px-3 py-1 rounded text-sm" 
+                                                        onclick="expireSession({{ session.id }})">
+                                                    Expire Now
+                                                </button>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-gray-500 text-sm italic">Session has expired</span>
+                                        {% endif %}
+                                        <button class="bg-red-600 text-white px-3 py-1 rounded text-sm" 
+                                                onclick="deleteSession({{ session.id }})">
+                                            Delete
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                                    No sessions found. Try adjusting your filters.
+                                </td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
+        
+        {{ render_pagination(pagination, 'list_sessions', 
+                           search=search, 
+                           classroom_id=classroom_filter,
+                           course_id=course_filter,
+                           status=status_filter,
+                           per_page=per_page) }}
     </div>
 </div>
 
 <script>
-    function shareQRCodeHandler(qrCodeUrl) {
-        fetch(qrCodeUrl)
-            .then(response => response.blob())
-            .then(blob => {
+function getCsrfToken() {
+    return "{{ csrf_token() }}";
+}
+
+function shareQRCodeHandler(qrCodeUrl) {
+    fetch(qrCodeUrl)
+        .then(response => response.blob())
+        .then(blob => {
             const file = new File([blob], "qrcode.png", { type: blob.type });
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 navigator.share({
-                title: 'Session QR Code',
-                text: 'Scan this QR code to mark attendance.',
-                files: [file]
+                    title: 'Session QR Code',
+                    text: 'Scan this QR code to mark attendance.',
+                    files: [file]
                 }).catch((error) => {
-                // User cancelled or share failed
-                console.log('Sharing failed:', error);
+                    console.log('Sharing failed:', error);
                 });
             } else {
-                // Fallback: open QR code in new tab
                 const qrCodeWindow = window.open(qrCodeUrl, '_blank', 'width=600,height=600');
                 if (!qrCodeWindow) {
-                alert('Please allow pop-ups for this site to view the QR code.');
+                    alert('Please allow pop-ups for this site to view the QR code.');
                 }
             }
-            })
-            .catch(error => {
+        })
+        .catch(error => {
             console.error('Error fetching QR code:', error);
             alert('Failed to fetch QR code image.');
-            });
-    }
+        });
+}
 
 function expireSession(id) {
     if (confirm('Are you sure you want to expire this session immediately? Students will no longer be able to mark attendance.')) {
-        fetch(`/admin/sessions/expire/${id}`, {
+        const formData = new FormData();
+        formData.append('csrf_token', getCsrfToken());
+        
+        fetch(/admin/sessions/expire/, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            body: formData
         })
         .then(response => response.json())
         .then(data => {
@@ -139,11 +212,12 @@ function expireSession(id) {
 
 function deleteSession(id) {
     if (confirm('Are you sure you want to delete this session?')) {
-        fetch(`/admin/sessions/delete/${id}`, {
+        const formData = new FormData();
+        formData.append('csrf_token', getCsrfToken());
+        
+        fetch(/admin/sessions/delete/, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            body: formData
         })
         .then(response => response.json())
         .then(data => {
@@ -158,6 +232,26 @@ function deleteSession(id) {
             alert('An error occurred while deleting the session');
         });
     }
+}
+
+function applyFilters() {
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+    const url = new URL(window.location);
+    const searchParams = new URLSearchParams();
+    searchParams.set('page', '1');
+    
+    for (let [key, value] of formData.entries()) {
+        if (value) {
+            searchParams.set(key, value);
+        }
+    }
+    
+    window.location.href = url.pathname + '?' + searchParams.toString();
+}
+
+function clearFilters() {
+    window.location.href = window.location.pathname;
 }
 </script>
 {% endblock %}

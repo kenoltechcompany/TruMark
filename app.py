@@ -14,6 +14,11 @@ from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_bcrypt import Bcrypt
 from PIL import Image
+import secrets
+import sys
+import uuid
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String
 
 # Lazy import face_recognition to avoid startup issues
 face_recognition = None
@@ -115,9 +120,14 @@ def calculate_expiration(expiration_type, expiration_value, base_time=None):
     
     return None
 
+# Helper function for UUID generation
+def generate_uuid():
+    """Generate a new UUID4 as a string"""
+    return str(uuid.uuid4())
+
 # Models
 class Student(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(String(36), primary_key=True, default=generate_uuid)
     student_id = db.Column(db.String(10), unique=True, nullable=False)
     firstname = db.Column(db.String(100), nullable=False)
     lastname = db.Column(db.String(100), nullable=False)
@@ -125,20 +135,20 @@ class Student(db.Model):
     face_encoding = db.Column(db.Text, nullable=True)  # Stores the averaged face encoding from multiple images
     face_images = db.Column(db.Text, nullable=True)  # Stores paths to the 5 face images as JSON
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
+    class_id = db.Column(String(36), db.ForeignKey('class.id'), nullable=False)
     current_class = db.relationship('Class', backref='students')
 
 
 class Session(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(String(36), primary_key=True, default=generate_uuid)
     semester = db.Column(db.String(1), nullable=False)
     week = db.Column(db.String(10), nullable=False)
     date = db.Column(db.DateTime, nullable=False)
-    classroom_id = db.Column(db.Integer, db.ForeignKey('classroom.id'), nullable=False)
-    class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
-    lecturer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    classroom_id = db.Column(String(36), db.ForeignKey('classroom.id'), nullable=False)
+    class_id = db.Column(String(36), db.ForeignKey('class.id'), nullable=False)
+    lecturer_id = db.Column(String(36), db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=False)
+    course_id = db.Column(String(36), db.ForeignKey('course.id'), nullable=False)
     classroom = db.relationship('Classroom', backref='sessions')
     lecturer = db.relationship('User', backref='sessions')
     course = db.relationship('Course', backref='sessions')
@@ -183,16 +193,16 @@ class Session(db.Model):
         return 'Unknown'
 
 class Attendance(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
-    session_id = db.Column(db.Integer, db.ForeignKey('session.id'), nullable=False)
+    id = db.Column(String(36), primary_key=True, default=generate_uuid)
+    student_id = db.Column(String(36), db.ForeignKey('student.id'), nullable=False)
+    session_id = db.Column(String(36), db.ForeignKey('session.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
     altitude = db.Column(db.Float, nullable=True)
 
 class Program(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(String(36), primary_key=True, default=generate_uuid)
     program_name = db.Column(db.String(100), nullable=False)
 
     def get_short_name(self):
@@ -200,23 +210,45 @@ class Program(db.Model):
         return ' '.join(word[:3] for word in self.program_name.split())
 
 class Course(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(String(36), primary_key=True, default=generate_uuid)
     course_name = db.Column(db.String(100), nullable=False)
     course_code = db.Column(db.String(15), unique=True, nullable=False)
     credits = db.Column(db.Integer, nullable=False)
-    program_id = db.Column(db.Integer, db.ForeignKey('program.id'), nullable=False)
+    program_id = db.Column(String(36), db.ForeignKey('program.id'), nullable=False)
     program = db.relationship('Program', backref='courses')
 
 class Class(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    program_id = db.Column(db.Integer, db.ForeignKey('program.id'), nullable=False)
+    id = db.Column(String(36), primary_key=True, default=generate_uuid)
+    program_id = db.Column(String(36), db.ForeignKey('program.id'), nullable=False)
     group = db.Column(db.String(2), nullable=False)
     year_group = db.Column(db.String(10), nullable=False)
     program = db.relationship('Program', backref='classes')
     session = db.Column(db.String(10), nullable=False)  # e.g., "2023/2024"
 
+class RegistrationToken(db.Model):
+    id = db.Column(String(36), primary_key=True, default=generate_uuid)
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    class_id = db.Column(String(36), db.ForeignKey('class.id'), nullable=False)
+    created_by = db.Column(String(36), db.ForeignKey('user.id'), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    class_ref = db.relationship('Class', backref='registration_tokens')
+    creator = db.relationship('User', backref='created_tokens')
+    
+    @staticmethod
+    def generate_token():
+        """Generate a secure random token"""
+        return secrets.token_urlsafe(32)
+    
+    def get_registration_url(self):
+        """Get the full registration URL"""
+        from flask import url_for
+        return url_for('remote_registration', token=self.token, _external=True)
+
 class Classroom(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(String(36), primary_key=True, default=generate_uuid)
     name = db.Column(db.String(100), unique=True, nullable=False)
     coordinates = db.Column(db.Text, nullable=False)  # Store coordinates as a JSON string
     altitude = db.Column(db.Float, default=0.0)  # In meters
@@ -224,7 +256,7 @@ class Classroom(db.Model):
 
 # Update User model with password hashing
 class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(String(36), primary_key=True, default=generate_uuid)
     username = db.Column(db.String(80), unique=True, nullable=False)
     firstname = db.Column(db.String(80), nullable=True)
     lastname = db.Column(db.String(80), nullable=True)
@@ -234,7 +266,7 @@ class User(UserMixin, db.Model):
     is_rep = db.Column(db.Boolean, default=False)
     is_lecturer = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=True)
+    class_id = db.Column(String(36), db.ForeignKey('class.id'), nullable=True)
     current_class = db.relationship('Class', backref='representatives', foreign_keys=[class_id])
     
 
@@ -278,7 +310,7 @@ class User(UserMixin, db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return User.query.get(user_id)  # user_id is now a UUID string
 
 # Update login route with password hashing
 @app.route('/login', methods=['GET', 'POST'])
@@ -448,6 +480,289 @@ def new_student():
                              'rep_class_id': current_user.class_id
                          })
 
+# Remote Registration Token Management
+@app.route('/admin/registration-tokens')
+@login_required
+def list_registration_tokens():
+    """List all registration tokens for the current user's accessible classes"""
+    if not (current_user.is_admin or current_user.is_lecturer or current_user.is_rep):
+        flash('Access denied')
+        return redirect(url_for('admin_dashboard'))
+    
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    search = request.args.get('search', '', type=str)
+    status_filter = request.args.get('status', '', type=str)
+    
+    # Get base query based on user role
+    if current_user.is_admin:
+        query = RegistrationToken.query
+    elif current_user.is_lecturer:
+        class_ids = [c.id for c in current_user.teaching_classes]
+        query = RegistrationToken.query.filter(RegistrationToken.class_id.in_(class_ids))
+    else:  # class rep
+        query = RegistrationToken.query.filter_by(class_id=current_user.class_id)
+    
+    # Apply search filter
+    if search:
+        search_filter = f"%{search}%"
+        query = query.join(Class).join(Program).filter(
+            db.or_(
+                Program.program_name.ilike(search_filter),
+                Class.group.ilike(search_filter)
+            )
+        )
+    
+    # Apply status filter
+    if status_filter == 'active':
+        query = query.filter(RegistrationToken.is_active == True)
+    elif status_filter == 'inactive':
+        query = query.filter(RegistrationToken.is_active == False)
+    
+    # Order and paginate
+    query = query.order_by(RegistrationToken.created_at.desc())
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    return render_template('admin/registration_tokens/list.html', 
+                         tokens=pagination.items,
+                         pagination=pagination,
+                         search=search,
+                         status_filter=status_filter,
+                         per_page=per_page)
+
+@app.route('/admin/registration-tokens/generate', methods=['GET', 'POST'])
+@login_required
+def generate_registration_token():
+    """Generate a new registration token"""
+    if not (current_user.is_admin or current_user.is_lecturer or current_user.is_rep):
+        flash('Access denied')
+        return redirect(url_for('admin_dashboard'))
+    
+    if request.method == 'POST':
+        try:
+            class_id = request.form.get('class_id')
+            sys.stdout.flush()  # Force flush output
+            print(f"DEBUG: Received class_id: '{class_id}' (type: {type(class_id)})", flush=True)
+            print(f"DEBUG: Form data: {request.form}", flush=True)
+            print(f"DEBUG: Current user: {current_user.username}, is_admin: {current_user.is_admin}, is_lecturer: {current_user.is_lecturer}, is_rep: {current_user.is_rep}", flush=True)
+            
+            # Validate that class_id was provided and not empty
+            if not class_id or class_id == '':
+                print("DEBUG: class_id is empty or None", flush=True)
+                return jsonify({'success': False, 'error': 'Please select a class'}), 400
+            
+            # class_id is now a UUID string, no conversion needed
+            print(f"DEBUG: Using class_id as UUID string: {class_id}")
+            
+            # Validate class access
+            if current_user.is_rep and class_id != current_user.class_id:
+                return jsonify({'success': False, 'error': 'Access denied to this class'}), 403
+            
+            if current_user.is_lecturer:
+                class_ids = [c.id for c in current_user.teaching_classes]
+                print(f"DEBUG: Lecturer's class IDs: {class_ids}")
+                if class_id not in class_ids:
+                    return jsonify({'success': False, 'error': 'Access denied to this class'}), 403
+            
+            # Verify class exists
+            target_class = Class.query.get(class_id)
+            print(f"DEBUG: Target class: {target_class}")
+            if not target_class:
+                return jsonify({'success': False, 'error': 'Class not found'}), 404
+            
+            # Check if active token already exists for this class
+            existing_token = RegistrationToken.query.filter_by(class_id=class_id, is_active=True).first()
+            print(f"DEBUG: Existing token: {existing_token}")
+            if existing_token:
+                registration_url = url_for('remote_registration', token=existing_token.token, _external=True)
+                print(f"DEBUG: Reusing existing token, URL: {registration_url}")
+                return jsonify({
+                    'success': True,
+                    'token': existing_token.token,
+                    'url': registration_url,
+                    'message': 'Using existing active token for this class'
+                })
+            
+            # Generate new token
+            new_token_string = RegistrationToken.generate_token()
+            print(f"DEBUG: Generated new token string: {new_token_string}")
+            
+            token = RegistrationToken(
+                token=new_token_string,
+                class_id=class_id,
+                created_by=current_user.id,
+                is_active=True
+            )
+            
+            db.session.add(token)
+            db.session.commit()
+            print(f"DEBUG: Token saved to database with ID: {token.id}")
+            
+            registration_url = url_for('remote_registration', token=token.token, _external=True)
+            print(f"DEBUG: Generated URL: {registration_url}")
+            return jsonify({
+                'success': True,
+                'token': token.token,
+                'url': registration_url
+            })
+            
+        except Exception as e:
+            print(f"Error generating registration token: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 400
+    
+    # GET request - show form
+    if current_user.is_admin:
+        classes = Class.query.all()
+    elif current_user.is_lecturer:
+        classes = current_user.teaching_classes
+    else:  # class rep
+        classes = [current_user.current_class] if current_user.current_class else []
+    
+    return render_template('admin/registration_tokens/generate.html', classes=classes)
+
+@app.route('/admin/registration-tokens/toggle/<token_id>', methods=['POST'])
+@login_required
+def toggle_registration_token(token_id):
+    """Toggle registration token active status"""
+    if not (current_user.is_admin or current_user.is_lecturer or current_user.is_rep):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    
+    token = RegistrationToken.query.get_or_404(token_id)
+    
+    # Verify access
+    if current_user.is_rep and token.class_id != current_user.class_id:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    
+    if current_user.is_lecturer:
+        class_ids = [c.id for c in current_user.teaching_classes]
+        if token.class_id not in class_ids:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    
+    token.is_active = not token.is_active
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'is_active': token.is_active,
+        'message': f"Registration {'enabled' if token.is_active else 'disabled'}"
+    })
+
+@app.route('/admin/registration-tokens/delete/<token_id>', methods=['POST'])
+@login_required
+def delete_registration_token(token_id):
+    """Delete a registration token"""
+    if not (current_user.is_admin or current_user.is_lecturer or current_user.is_rep):
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    
+    token = RegistrationToken.query.get_or_404(token_id)
+    
+    # Verify access
+    if current_user.is_rep and token.class_id != current_user.class_id:
+        return jsonify({'success': False, 'error': 'Access denied'}), 403
+    
+    if current_user.is_lecturer:
+        class_ids = [c.id for c in current_user.teaching_classes]
+        if token.class_id not in class_ids:
+            return jsonify({'success': False, 'error': 'Access denied'}), 403
+    
+    db.session.delete(token)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Registration link deleted'})
+
+# Remote Registration (Public Access with Token)
+@app.route('/register/<token>')
+@csrf.exempt
+def remote_registration(token):
+    """Public registration page accessed via token"""
+    reg_token = RegistrationToken.query.filter_by(token=token).first_or_404()
+    
+    if not reg_token.is_active:
+        return render_template('registration_closed.html', 
+                             class_info=reg_token.class_ref,
+                             creator=reg_token.creator)
+    
+    return render_template('remote_registration.html', 
+                         token=token,
+                         class_info=reg_token.class_ref)
+
+@app.route('/api/remote-register/<token>', methods=['POST'])
+@csrf.exempt
+def api_remote_registration(token):
+    """API endpoint for remote student registration"""
+    reg_token = RegistrationToken.query.filter_by(token=token).first_or_404()
+    
+    if not reg_token.is_active:
+        return jsonify({'success': False, 'error': 'Registration is currently closed. Please contact your lecturer or class representative.'}), 403
+    
+    try:
+        # Get form data
+        student_id = request.form.get('student_id')
+        firstname = request.form.get('firstname')
+        lastname = request.form.get('lastname')
+        othernames = request.form.get('othernames', '')
+        
+        # Check if student already exists
+        existing_student = Student.query.filter_by(student_id=student_id).first()
+        if existing_student:
+            return jsonify({'success': False, 'error': f'Student with ID {student_id} already exists'}), 400
+        
+        # Get face images
+        face_images = request.files.getlist('face_images')
+        if len(face_images) != 5:
+            return jsonify({'success': False, 'error': 'Exactly 5 face images are required'}), 400
+        
+        # Process face images
+        fr = get_face_recognition()
+        student_folder = os.path.join('uploads', f'student_{student_id}')
+        os.makedirs(student_folder, exist_ok=True)
+        
+        encodings = []
+        image_paths = []
+        
+        for i, img_file in enumerate(face_images):
+            filename = secure_filename(f'face_{i+1}.jpg')
+            filepath = os.path.join(student_folder, filename)
+            img_file.save(filepath)
+            image_paths.append(filepath)
+            
+            # Extract face encoding
+            image = fr.load_image_file(filepath)
+            face_encodings = fr.face_encodings(image)
+            
+            if len(face_encodings) == 0:
+                return jsonify({'success': False, 'error': f'No face detected in image {i+1}. Please retake the photo.'}), 400
+            
+            encodings.append(face_encodings[0])
+        
+        # Average the encodings
+        avg_encoding = np.mean(encodings, axis=0)
+        
+        # Create student record with the token's class
+        student = Student(
+            student_id=student_id,
+            firstname=firstname,
+            lastname=lastname,
+            othernames=othernames,
+            face_encoding=json.dumps(avg_encoding.tolist()),
+            face_images=json.dumps(image_paths),
+            class_id=reg_token.class_id  # Use the class from the token
+        )
+        
+        db.session.add(student)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Registration successful!'})
+        
+    except Exception as e:
+        print(f"Error in remote registration: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 400
+
 @app.route('/admin/sessions/new', methods=['GET', 'POST'])
 @login_required
 def new_session():
@@ -459,7 +774,7 @@ def new_session():
     if request.method == 'POST':
         # For class reps, use their assigned class
         lecturer = User.query.get(request.form['lecturer_id'])
-        class_id = int(current_user.class_id if current_user.is_rep else request.form['class_id'])
+        class_id = current_user.class_id if current_user.is_rep else request.form['class_id']
         
         # Get expiration settings
         expiration_type = request.form.get('expiration_type', 'always_open')
@@ -531,7 +846,7 @@ def new_session():
                          classes=classes,
                          lecturers=lecturers)
 
-@app.route('/attendance/<int:session_id>')
+@app.route('/attendance/<session_id>')
 def attendance(session_id):
     session = Session.query.get_or_404(session_id)
     
@@ -747,7 +1062,7 @@ def attendance_success(studentname):
                          datetime=datetime,
                          in_classroom=in_classroom)
 
-@app.route('/admin/students/delete/<int:student_id>', methods=['POST'])
+@app.route('/admin/students/delete/<student_id>', methods=['POST'])
 @csrf.exempt
 def delete_student(student_id):
     try:
@@ -760,7 +1075,7 @@ def delete_student(student_id):
 
 
 # Add this route to view session attendance
-@app.route('/admin/attendance/<int:session_id>')
+@app.route('/admin/attendance/<session_id>')
 @login_required
 def session_attendance(session_id):
     session = Session.query.get_or_404(session_id)
@@ -788,7 +1103,7 @@ def session_attendance(session_id):
         attendance_data=attendance_data
     )
 
-@app.route('/admin/attendance/<int:session_id>/export')
+@app.route('/admin/attendance/<session_id>/export')
 @login_required
 def export_attendance(session_id):
     import csv
@@ -833,7 +1148,7 @@ def export_attendance(session_id):
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment;filename={filename}"})
 
-@app.route('/admin/sessions/delete/<int:session_id>', methods=['POST'])
+@app.route('/admin/sessions/delete/<session_id>', methods=['POST'])
 @csrf.exempt
 def delete_session(session_id):
     try:
@@ -850,7 +1165,7 @@ def delete_session(session_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
-@app.route('/admin/sessions/expire/<int:session_id>', methods=['POST'])
+@app.route('/admin/sessions/expire/<session_id>', methods=['POST'])
 @csrf.exempt
 @login_required
 def expire_session(session_id):
@@ -874,8 +1189,38 @@ def list_users():
     if not current_user.is_admin:
         flash('Access denied')
         return redirect(url_for('admin_dashboard'))
-    users = User.query.all()
-    return render_template('admin/users/list.html', users=users)
+    
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    search = request.args.get('search', '', type=str)
+    role_filter = request.args.get('role', '', type=str)
+    
+    # Build query
+    query = User.query
+    
+    # Apply search filter
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(User.username.ilike(search_filter))
+    
+    # Apply role filter
+    if role_filter == 'admin':
+        query = query.filter(User.is_admin == True)
+    elif role_filter == 'lecturer':
+        query = query.filter(User.is_lecturer == True)
+    elif role_filter == 'rep':
+        query = query.filter(User.is_rep == True)
+    
+    # Order and paginate
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    return render_template('admin/users/list.html', 
+                         users=pagination.items,
+                         pagination=pagination,
+                         search=search,
+                         role_filter=role_filter,
+                         per_page=per_page)
 
 @app.route('/admin/users/new', methods=['GET', 'POST'])
 @login_required
@@ -979,10 +1324,30 @@ def list_classrooms():
     if not current_user.is_admin:
         flash('Access denied')
         return redirect(url_for('admin_dashboard'))
-    classrooms = Classroom.query.all()
-    return render_template('admin/classrooms/list.html', classrooms=classrooms)
+    
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    search = request.args.get('search', '', type=str)
+    
+    # Build query
+    query = Classroom.query
+    
+    # Apply search filter
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(Classroom.name.ilike(search_filter))
+    
+    # Order and paginate
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    return render_template('admin/classrooms/list.html', 
+                         classrooms=pagination.items,
+                         pagination=pagination,
+                         search=search,
+                         per_page=per_page)
 
-@app.route('/admin/classrooms/edit/<int:classroom_id>', methods=['GET', 'POST'])
+@app.route('/admin/classrooms/edit/<classroom_id>', methods=['GET', 'POST'])
 @csrf.exempt
 def edit_classroom(classroom_id):
     classroom = Classroom.query.get_or_404(classroom_id)
@@ -1016,7 +1381,7 @@ def edit_classroom(classroom_id):
     coordinates = json.loads(classroom.coordinates)
     return render_template('admin/classrooms/edit.html', classroom=classroom, coordinates=coordinates)
 
-@app.route('/admin/classrooms/delete/<int:classroom_id>', methods=['POST'])
+@app.route('/admin/classrooms/delete/<classroom_id>', methods=['POST'])
 @csrf.exempt
 def delete_classroom(classroom_id):
     try:
@@ -1055,14 +1420,107 @@ def generate_qrcode(session_id):
 @app.route('/admin/students')
 @login_required
 def list_students():
-    students = Student.query.order_by(Student.created_at.desc()).all()
-    return render_template('admin/students/list.html', students=students)
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    search = request.args.get('search', '', type=str)
+    class_filter = request.args.get('class_id', '', type=str)
+    
+    # Build query
+    query = Student.query
+    
+    # Apply search filter
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            db.or_(
+                Student.student_id.ilike(search_filter),
+                Student.firstname.ilike(search_filter),
+                Student.lastname.ilike(search_filter),
+                Student.othernames.ilike(search_filter)
+            )
+        )
+    
+    # Apply class filter
+    if class_filter:
+        query = query.filter(Student.class_id == class_filter)
+    
+    # Order and paginate
+    query = query.order_by(Student.created_at.desc())
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    # Get all classes for filter dropdown
+    classes = Class.query.all()
+    
+    return render_template('admin/students/list.html', 
+                         students=pagination.items,
+                         pagination=pagination,
+                         classes=classes,
+                         search=search,
+                         class_filter=class_filter,
+                         per_page=per_page)
 
 @app.route('/sessions')
 @login_required
 def list_sessions():
-    sessions = Session.query.order_by(Session.date.desc()).all()
-    return render_template('admin/sessions/list.html', sessions=sessions)
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    search = request.args.get('search', '', type=str)
+    classroom_filter = request.args.get('classroom_id', '', type=str)
+    course_filter = request.args.get('course_id', '', type=str)
+    status_filter = request.args.get('status', '', type=str)
+    
+    # Build query
+    query = Session.query
+    
+    # Apply search filter
+    if search:
+        search_filter = f"%{search}%"
+        query = query.join(Course).filter(
+            db.or_(
+                Course.course_name.ilike(search_filter),
+                Session.lecturer.ilike(search_filter)
+            )
+        )
+    
+    # Apply classroom filter
+    if classroom_filter:
+        query = query.filter(Session.classroom_id == classroom_filter)
+    
+    # Apply course filter
+    if course_filter:
+        query = query.filter(Session.course_id == course_filter)
+    
+    # Apply status filter
+    if status_filter == 'expired':
+        query = query.filter(Session.expires_at < datetime.now())
+    elif status_filter == 'active':
+        query = query.filter(
+            db.or_(
+                Session.expiration_type == 'always_open',
+                Session.expires_at >= datetime.now()
+            )
+        )
+    
+    # Order and paginate
+    query = query.order_by(Session.date.desc())
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    # Get filter options
+    classrooms = Classroom.query.all()
+    courses = Course.query.all()
+    
+    return render_template('admin/sessions/list.html', 
+                         sessions=pagination.items,
+                         pagination=pagination,
+                         classrooms=classrooms,
+                         courses=courses,
+                         search=search,
+                         classroom_filter=classroom_filter,
+                         course_filter=course_filter,
+                         status_filter=status_filter,
+                         per_page=per_page)
 
 @app.route('/admin/programs')
 @login_required
@@ -1070,8 +1528,28 @@ def list_programs():
     if not current_user.is_admin:
         flash('Access denied')
         return redirect(url_for('admin_dashboard'))
-    programs = Program.query.all()
-    return render_template('admin/programs/list.html', programs=programs)
+    
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    search = request.args.get('search', '', type=str)
+    
+    # Build query
+    query = Program.query
+    
+    # Apply search filter
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(Program.program_name.ilike(search_filter))
+    
+    # Order and paginate
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    return render_template('admin/programs/list.html', 
+                         programs=pagination.items,
+                         pagination=pagination,
+                         search=search,
+                         per_page=per_page)
 
 @app.route('/admin/programs/new', methods=['GET', 'POST'])
 @login_required
@@ -1097,8 +1575,33 @@ def list_courses():
     if not current_user.is_admin:
         flash('Access denied')
         return redirect(url_for('admin_dashboard'))
-    courses = Course.query.all()
-    return render_template('admin/courses/list.html', courses=courses)
+    
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    search = request.args.get('search', '', type=str)
+    
+    # Build query
+    query = Course.query
+    
+    # Apply search filter
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            db.or_(
+                Course.course_name.ilike(search_filter),
+                Course.course_code.ilike(search_filter)
+            )
+        )
+    
+    # Order and paginate
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    return render_template('admin/courses/list.html', 
+                         courses=pagination.items,
+                         pagination=pagination,
+                         search=search,
+                         per_page=per_page)
 
 @app.route('/admin/courses/new', methods=['GET', 'POST'])
 @login_required
@@ -1121,7 +1624,7 @@ def new_course():
     programs = Program.query.all()
     return render_template('admin/courses/new.html', programs=programs)
 
-@app.route('/admin/programs/edit/<int:program_id>', methods=['GET', 'POST'])
+@app.route('/admin/programs/edit/<program_id>', methods=['GET', 'POST'])
 @login_required
 def edit_program(program_id):
     if not current_user.is_admin:
@@ -1139,7 +1642,7 @@ def edit_program(program_id):
     
     return render_template('admin/programs/edit.html', program=program)
 
-@app.route('/admin/courses/edit/<int:course_id>', methods=['GET', 'POST'])
+@app.route('/admin/courses/edit/<course_id>', methods=['GET', 'POST'])
 @login_required
 def edit_course(course_id):
     if not current_user.is_admin:
@@ -1159,7 +1662,7 @@ def edit_course(course_id):
     programs = Program.query.all()
     return render_template('admin/courses/edit.html', course=course, programs=programs)
     
-@app.route('/admin/courses/delete/<int:course_id>', methods=['POST'])
+@app.route('/admin/courses/delete/<course_id>', methods=['POST'])
 @login_required
 def delete_course(course_id):
     print(f"Deleting course with ID: {course_id}")
@@ -1180,8 +1683,50 @@ def list_classes():
     if not current_user.is_admin:
         flash('Access denied')
         return redirect(url_for('admin_dashboard'))
-    classes = Class.query.all()
-    return render_template('admin/classes/list.html', classes=classes)
+    
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    search = request.args.get('search', '', type=str)
+    program_filter = request.args.get('program_id', '', type=str)
+    year_filter = request.args.get('year_group', '', type=str)
+    
+    # Build query
+    query = Class.query
+    
+    # Apply search filter
+    if search:
+        search_filter = f"%{search}%"
+        query = query.join(Program).filter(
+            db.or_(
+                Program.program_name.ilike(search_filter),
+                Class.group.ilike(search_filter),
+                Class.session.ilike(search_filter)
+            )
+        )
+    
+    # Apply program filter
+    if program_filter:
+        query = query.filter(Class.program_id == program_filter)
+    
+    # Apply year filter
+    if year_filter:
+        query = query.filter(Class.year_group == year_filter)
+    
+    # Order and paginate
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    # Get filter options
+    programs = Program.query.all()
+    
+    return render_template('admin/classes/list.html', 
+                         classes=pagination.items,
+                         pagination=pagination,
+                         programs=programs,
+                         search=search,
+                         program_filter=program_filter,
+                         year_filter=year_filter,
+                         per_page=per_page)
 
 @app.route('/admin/classes/new', methods=['GET', 'POST'])
 @login_required
@@ -1205,7 +1750,7 @@ def new_class():
     programs = Program.query.all()
     return render_template('admin/classes/new.html', programs=programs)
 
-@app.route('/admin/classes/edit/<int:class_id>', methods=['GET', 'POST'])
+@app.route('/admin/classes/edit/<class_id>', methods=['GET', 'POST'])
 @login_required
 def edit_class(class_id):
     if not current_user.is_admin:
@@ -1227,7 +1772,7 @@ def edit_class(class_id):
     sessions = ['morning', 'evening', 'weekend']
     return render_template('admin/classes/edit.html', cur_class=cur_class, programs=programs, sessions=sessions)
 
-@app.route('/admin/classes/delete/<int:class_id>', methods=['POST'])
+@app.route('/admin/classes/delete/<class_id>', methods=['POST'])
 @login_required
 def delete_class(class_id):
     if not current_user.is_admin:
@@ -1249,7 +1794,7 @@ def delete_class(class_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
-@app.route('/admin/sessions/edit/<int:session_id>', methods=['GET', 'POST'])
+@app.route('/admin/sessions/edit/<session_id>', methods=['GET', 'POST'])
 @login_required
 def edit_session(session_id):
     if not current_user.is_admin:
@@ -1276,8 +1821,8 @@ def edit_session(session_id):
 
 # Add new association table for lecturer-class relationship
 lecturer_classes = db.Table('lecturer_classes',
-    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
-    db.Column('class_id', db.Integer, db.ForeignKey('class.id'), primary_key=True),
+    db.Column('user_id', String(36), db.ForeignKey('user.id'), primary_key=True),
+    db.Column('class_id', String(36), db.ForeignKey('class.id'), primary_key=True),
 )
 
 @app.route('/admin/profile', methods=['GET', 'POST'])
@@ -1329,7 +1874,7 @@ def change_password():
     
     return redirect(url_for('edit_profile'))
 
-@app.route('/admin/users/edit/<int:user_id>', methods=['GET', 'POST'])
+@app.route('/admin/users/edit/<user_id>', methods=['GET', 'POST'])
 @login_required
 def edit_user(user_id):
     if not current_user.is_admin:

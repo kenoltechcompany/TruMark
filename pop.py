@@ -7,28 +7,29 @@ def populate_db():
     if not User.query.filter_by(username='admin').first():
         # Create sample users
         user3 = User('admin','1111@QWERTY',True,False,False,None)
+        db.session.add(user3)
     else:
         print("User 'admin' already exists.")
         
-    # Create sample users
-    user1 = User('kelvin','kelvin',False,True,False,None)
-    user2 = User('kk','kelvin',False,False,True,1)
+    # # Create sample users
+    # user1 = User('kelvin','kelvin',False,True,False,None)
+    # user2 = User('kk','kelvin',False,False,True,1)
 
-    # Create sample courses
-    course1 = Course(program_id=1,course_code='CS101', course_name='Introduction to Computer Science', credits=3)
-    course2 = Course(program_id=1,course_code='MATH101', course_name='Calculus I', credits=4)
+    # # Create sample courses
+    # course1 = Course(program_id=1,course_code='CS101', course_name='Introduction to Computer Science', credits=3)
+    # course2 = Course(program_id=1,course_code='MATH101', course_name='Calculus I', credits=4)
 
-    # Create sample programs
-    program1 = Program(program_name='Bachelor of Science in Computer Science')
-    program2 = Program(program_name='Bachelor of Science in Mathematics')
+    # # Create sample programs
+    # program1 = Program(program_name='Bachelor of Science in Computer Science')
+    # program2 = Program(program_name='Bachelor of Science in Mathematics')
 
-    class1 = Class(program=program1, group="A", year_group="2024/2025", session="Morning")
-    # # Add class1 to user1's teaching classes
-    user1.teaching_classes.append(class1)
+    # class1 = Class(program=program1, group="A", year_group="2024/2025", session="Morning")
+    # # # Add class1 to user1's teaching classes
+    # user1.teaching_classes.append(class1)
 
 
     # Add all instances to the session
-    db.session.add_all([user1, user2, user3, course1, course2, program1, program2])
+    # db.session.add_all([user1, user2, user3, course1, course2, program1, program2])
     # Commit the session to save the data to the database
     db.session.commit()
 

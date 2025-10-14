@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from 'macros/pagination.html' import render_pagination %}
+{% from 'macros/filters.html' import render_search_bar %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto bg-white shadow rounded-lg p-6">
-    <div class="flex justify-between items-center mb-6">
+<div class="max-w-6xl mx-auto px-4 mt-4">
+    <div class="flex justify-between items-center mb-4">
         <h2 class="text-2xl font-bold">Manage Classes</h2>
         <a href="{{ url_for('new_class') }}" 
            class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
@@ -10,52 +12,110 @@
         </a>
     </div>
 
-    {% if classes %}
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Group</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year Group</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Session</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                {% for class in classes %}
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ class.program.program_name }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ class.group }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ class.year_group }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ class.session }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex space-x-2">
-                            <a href="{{ url_for('edit_class', class_id=class.id) }}" 
-                               class="text-blue-600 hover:text-blue-900">Edit</a>
-                            <button onclick="deleteClass({{ class.id }})" 
-                                    class="text-red-600 hover:text-red-900">Delete</button>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <form id="filterForm" class="flex flex-wrap gap-4 items-end">
+            {{ render_search_bar(search, 'Search by program, group...') }}
+            
+            <div class="flex flex-col">
+                <label for="program_id" class="text-sm font-medium text-gray-700 mb-1">Program</label>
+                <select id="program_id" name="program_id"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">All Programs</option>
+                    {% for program in programs %}
+                        <option value="{{ program.id }}" {% if program_filter == program.id|string %}selected{% endif %}>
+                            {{ program.program_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex flex-col">
+                <label for="year_group" class="text-sm font-medium text-gray-700 mb-1">Year</label>
+                <select id="year_group" name="year_group"
+                        class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">All Years</option>
+                    <option value="1" {% if year_filter == '1' %}selected{% endif %}>Year 1</option>
+                    <option value="2" {% if year_filter == '2' %}selected{% endif %}>Year 2</option>
+                    <option value="3" {% if year_filter == '3' %}selected{% endif %}>Year 3</option>
+                    <option value="4" {% if year_filter == '4' %}selected{% endif %}>Year 4</option>
+                </select>
+            </div>
+            
+            <div class="flex gap-2">
+                <button type="button" onclick="applyFilters()" 
+                        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    Apply
+                </button>
+                <button type="button" onclick="clearFilters()" 
+                        class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                    Clear
+                </button>
+            </div>
+        </form>
     </div>
-    {% else %}
-    <p class="text-center text-gray-500 my-4">No classes found.</p>
-    {% endif %}
+
+    <div class="bg-white shadow rounded-lg">
+        <div class="p-4">
+            {% if classes %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Group</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year Group</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Session</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for class in classes %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ class.program.program_name }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ class.group }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ class.year_group }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ class.session }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex space-x-2">
+                                    <a href="{{ url_for('edit_class', class_id=class.id) }}" 
+                                       class="text-blue-600 hover:text-blue-900">Edit</a>
+                                    <button onclick="deleteClass({{ class.id }})" 
+                                            class="text-red-600 hover:text-red-900">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-center text-gray-500 py-8">No classes found. Try adjusting your filters.</p>
+            {% endif %}
+        </div>
+        
+        {% if classes %}
+        {{ render_pagination(pagination, 'list_classes', 
+                           search=search,
+                           program_id=program_filter,
+                           year_group=year_filter,
+                           per_page=per_page) }}
+        {% endif %}
+    </div>
 </div>
 
 <script>
+function getCsrfToken() {
+    return "{{ csrf_token() }}";
+}
+
 function deleteClass(id) {
     if (confirm('Are you sure you want to delete this class?')) {
+        const formData = new FormData();
+        formData.append('csrf_token', getCsrfToken());
+        
         fetch(`/admin/classes/delete/${id}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token() }}'
-            }
+            body: formData
         })
         .then(response => response.json())
         .then(data => {
@@ -71,5 +131,21 @@ function deleteClass(id) {
         });
     }
 }
+
+function applyFilters() {
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+    const url = new URL(window.location);
+    const searchParams = new URLSearchParams();
+    searchParams.set('page', '1');
+    for (let [key, value] of formData.entries()) {
+        if (value) searchParams.set(key, value);
+    }
+    window.location.href = url.pathname + '?' + searchParams.toString();
+}
+
+function clearFilters() {
+    window.location.href = window.location.pathname;
+}
 </script>
-{% endblock %} 
+{% endblock %}

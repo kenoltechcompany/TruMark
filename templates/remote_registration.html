@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Student Registration - {{ class_info.program.program_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto bg-white rounded-xl shadow-lg p-8 mt-8">
+    <div class="mb-8 border-b border-gray-200 pb-6">
+        <h2 class="text-3xl font-bold text-blue-600">Student Registration</h2>
+        <p class="text-gray-600 mt-2">{{ class_info.program.program_name }} - Group {{ class_info.group }}</p>
+        <p class="text-gray-500 text-sm">Academic Year: {{ class_info.year_group }}</p>
+    </div>
+
+    <form id="studentForm" class="space-y-6">
+        <div class="grid md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Student ID</label>
+                <input type="text" pattern="[0-9]{10}" name="student_id" required 
+                       placeholder="Enter your 10-digit ID"
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                <input type="text" name="firstname" required 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                <input type="text" name="lastname" required 
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition">
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Other Names (Optional)</label>
+                <input type="text" name="othernames"  
+                       class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition">
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-blue-600 font-bold mb-3">Face Enrollment (5 Photos Required)</label>
+            <div class="border p-3 rounded-lg bg-gray-100">
+                <div class="relative aspect-video rounded-lg overflow-hidden bg-gray-800 mb-3">
+                    <video id="video" class="w-full h-full object-cover" autoplay muted></video>
+                </div>
+                
+                <!-- Progress indicator -->
+                <div class="mb-3">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Photos captured: <span id="photoCount">0</span>/5</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <!-- Instruction text -->
+                <div id="instruction" class="text-center text-lg font-medium mb-3 p-3 bg-blue-50 rounded-lg text-blue-700">
+                    Click "Start Camera" to begin
+                </div>
+                
+                <!-- Status message -->
+                <div id="status" class="text-center text-sm mb-3 p-2"></div>
+                
+                <!-- Thumbnails of captured photos -->
+                <div id="thumbnails" class="grid grid-cols-5 gap-2 mb-3" style="display: none;">
+                    <div data-index="0" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">1</span>
+                    </div>
+                    <div data-index="1" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">2</span>
+                    </div>
+                    <div data-index="2" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">3</span>
+                    </div>
+                    <div data-index="3" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">4</span>
+                    </div>
+                    <div data-index="4" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">5</span>
+                    </div>
+                </div>
+                
+                <!-- Retake hint -->
+                <div id="retakeHint" class="text-center text-xs text-gray-500 mb-2" style="display: none;">
+                    💡 Click on any photo to retake it
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-end space-x-4">
+            <button type="button" id="startCameraButton" 
+                    class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                Start Camera
+            </button>
+            <button type="button" id="captureButton" style="display: none;"
+                    class="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                Capture Photo
+            </button>
+            <button type="submit" id="submitButton" style="display: none;"
+                    class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Complete Registration
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const instruction = document.getElementById('instruction');
+const status = document.getElementById('status');
+const form = document.getElementById('studentForm');
+const startCameraButton = document.getElementById('startCameraButton');
+const captureButton = document.getElementById('captureButton');
+const submitButton = document.getElementById('submitButton');
+const photoCount = document.getElementById('photoCount');
+const progressBar = document.getElementById('progressBar');
+const thumbnails = document.getElementById('thumbnails');
+const retakeHint = document.getElementById('retakeHint');
+
+let capturedImages = [null, null, null, null, null];
+let currentPhotoIndex = 0;
+let stream = null;
+let isRetaking = false;
+
+const instructions = [
+    "Look straight at the camera",
+    "Turn your head slightly to the LEFT",
+    "Turn your head slightly to the RIGHT",
+    "Tilt your head slightly UP",
+    "Tilt your head slightly DOWN"
+];
+
+function updateUI() {
+    const capturedCount = capturedImages.filter(img => img !== null).length;
+    photoCount.textContent = capturedCount;
+    progressBar.style.width = (capturedCount / 5 * 100) + '%';
+    
+    if (capturedCount > 0) {
+        retakeHint.style.display = 'block';
+    }
+    
+    if (currentPhotoIndex < 5) {
+        instruction.textContent = instructions[currentPhotoIndex];
+    }
+    
+    if (capturedCount === 5) {
+        instruction.textContent = 'All photos captured! Click "Complete Registration" to finish.';
+        instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-green-50 rounded-lg text-green-700';
+        captureButton.style.display = 'none';
+        submitButton.style.display = 'flex';
+        
+        if (stream && !isRetaking) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null;
+        }
+    } else {
+        submitButton.style.display = 'none';
+        if (stream) {
+            captureButton.style.display = 'flex';
+        }
+    }
+}
+
+function updateThumbnail(index, blob) {
+    const thumbnailDiv = thumbnails.children[index];
+    
+    if (blob) {
+        thumbnailDiv.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(blob);
+        img.className = 'w-full h-full object-cover rounded';
+        thumbnailDiv.appendChild(img);
+        
+        const overlay = document.createElement('div');
+        overlay.className = 'absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-50 flex items-center justify-center transition-all rounded cursor-pointer';
+        overlay.innerHTML = '<span class="text-white opacity-0 hover:opacity-100 text-xs font-bold">RETAKE</span>';
+        thumbnailDiv.style.position = 'relative';
+        thumbnailDiv.appendChild(overlay);
+        
+        thumbnailDiv.className = 'thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-green-500 cursor-pointer';
+    } else {
+        const slotNumber = thumbnailDiv.querySelector('.slot-number');
+        if (!slotNumber) {
+            thumbnailDiv.innerHTML = `<span class="slot-number">${index + 1}</span>`;
+        }
+        thumbnailDiv.className = 'thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors';
+    }
+}
+
+thumbnails.addEventListener('click', (e) => {
+    const thumbnailSlot = e.target.closest('.thumbnail-slot');
+    if (!thumbnailSlot) return;
+    
+    const index = parseInt(thumbnailSlot.dataset.index);
+    
+    if (capturedImages[index] !== null) {
+        if (confirm(`Retake photo ${index + 1}?\n\nInstruction: ${instructions[index]}`)) {
+            retakePhoto(index);
+        }
+    }
+});
+
+function retakePhoto(index) {
+    isRetaking = true;
+    currentPhotoIndex = index;
+    
+    capturedImages[index] = null;
+    updateThumbnail(index, null);
+    
+    if (!stream || !stream.active) {
+        startCamera().then(() => {
+            status.textContent = `Retaking photo ${index + 1}. Position yourself and click "Capture Photo".`;
+            status.className = 'text-center text-sm mb-3 p-2 bg-yellow-50 text-yellow-700 rounded';
+            instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-yellow-50 rounded-lg text-yellow-700';
+        });
+    } else {
+        updateUI();
+        status.textContent = `Retaking photo ${index + 1}. Position yourself and click "Capture Photo".`;
+        status.className = 'text-center text-sm mb-3 p-2 bg-yellow-50 text-yellow-700 rounded';
+        instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-yellow-50 rounded-lg text-yellow-700';
+    }
+}
+
+async function startCamera() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: 'user'
+            }
+        });
+        video.srcObject = stream;
+        
+        startCameraButton.style.display = 'none';
+        captureButton.style.display = 'flex';
+        thumbnails.style.display = 'grid';
+        
+        instruction.textContent = instructions[currentPhotoIndex];
+        instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-green-50 rounded-lg text-green-700';
+        status.textContent = 'Camera ready. Click "Capture Photo" when ready.';
+        status.className = 'text-center text-sm mb-3 p-2 bg-blue-50 text-blue-700 rounded';
+    } catch (error) {
+        status.textContent = 'Error accessing camera: ' + error.message;
+        status.className = 'text-center text-sm mb-3 p-2 bg-red-50 text-red-700 rounded';
+    }
+}
+
+startCameraButton.addEventListener('click', startCamera);
+
+captureButton.addEventListener('click', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    
+    canvas.toBlob((blob) => {
+        capturedImages[currentPhotoIndex] = blob;
+        updateThumbnail(currentPhotoIndex, blob);
+        
+        if (!isRetaking) {
+            currentPhotoIndex++;
+        } else {
+            isRetaking = false;
+        }
+        
+        while (currentPhotoIndex < 5 && capturedImages[currentPhotoIndex] !== null && !isRetaking) {
+            currentPhotoIndex++;
+        }
+        
+        const capturedCount = capturedImages.filter(img => img !== null).length;
+        
+        if (capturedCount < 5) {
+            status.textContent = `Photo captured! ${5 - capturedCount} more to go.`;
+            status.className = 'text-center text-sm mb-3 p-2 bg-green-50 text-green-700 rounded';
+            instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-green-50 rounded-lg text-green-700';
+        } else {
+            if (stream && stream.active) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            status.textContent = 'All photos captured! You can retake any photo by clicking on it, or complete registration.';
+            status.className = 'text-center text-sm mb-3 p-2 bg-green-50 text-green-700 rounded';
+        }
+        
+        updateUI();
+    }, 'image/jpeg', 0.95);
+});
+
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const capturedCount = capturedImages.filter(img => img !== null).length;
+    if (capturedCount !== 5) {
+        alert('Please capture all 5 photos before submitting');
+        return;
+    }
+    
+    status.textContent = 'Processing registration...';
+    status.className = 'text-center text-sm mb-3 p-2 bg-yellow-50 text-yellow-700 rounded';
+    submitButton.disabled = true;
+    
+    try {
+        const formData = new FormData(form);
+        
+        capturedImages.forEach((blob, index) => {
+            formData.append('face_images', blob, `face_${index + 1}.jpg`);
+        });
+        
+        const response = await fetch('/api/remote-register/{{ token }}', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            status.textContent = 'Registration successful! Welcome aboard! 🎉';
+            status.className = 'text-center text-sm mb-3 p-2 bg-green-50 text-green-700 rounded font-bold';
+            form.reset();
+            capturedImages = [null, null, null, null, null];
+            currentPhotoIndex = 0;
+            
+            // Reset UI
+            for (let i = 0; i < 5; i++) {
+                updateThumbnail(i, null);
+            }
+            submitButton.style.display = 'none';
+            startCameraButton.style.display = 'flex';
+            thumbnails.style.display = 'none';
+            retakeHint.style.display = 'none';
+            photoCount.textContent = '0';
+            progressBar.style.width = '0%';
+            instruction.textContent = 'Click "Start Camera" to begin';
+            instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-blue-50 rounded-lg text-blue-700';
+            
+            alert('Registration successful! You can now close this page or register another student.');
+        } else {
+            throw new Error(result.error || 'Failed to register');
+        }
+    } catch (error) {
+        status.textContent = 'Error: ' + error.message;
+        status.className = 'text-center text-sm mb-3 p-2 bg-red-50 text-red-700 rounded';
+        submitButton.disabled = false;
+    }
+});
+</script>
+{% endblock %}

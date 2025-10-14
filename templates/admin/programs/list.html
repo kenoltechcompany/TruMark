@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from 'macros/pagination.html' import render_pagination %}
+{% from 'macros/filters.html' import render_search_bar %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto bg-white shadow rounded-lg p-6">
-    <div class="flex justify-between items-center mb-6">
+<div class="max-w-6xl mx-auto px-4 mt-4">
+    <div class="flex justify-between items-center mb-4">
         <h2 class="text-2xl font-bold">Manage Programs</h2>
         <a href="{{ url_for('new_program') }}" 
            class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
@@ -10,34 +12,104 @@
         </a>
     </div>
 
-    {% if programs %}
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program Name</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                {% for program in programs %}
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap">{{ program.program_name }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex space-x-2">
-                            <a href="{{ url_for('edit_program', program_id=program.id) }}" 
-                               class="text-blue-600 hover:text-blue-900">Edit</a>
-                            <button onclick="deleteProgram({{ program.id }})" 
-                                    class="text-red-600 hover:text-red-900">Delete</button>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="bg-white shadow rounded-lg p-4 mb-4">
+        <form id="filterForm" class="flex flex-wrap gap-4 items-end">
+            {{ render_search_bar(search, 'Search by program name...') }}
+            <div class="flex gap-2">
+                <button type="button" onclick="applyFilters()" 
+                        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    Search
+                </button>
+                <button type="button" onclick="clearFilters()" 
+                        class="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+                    Clear
+                </button>
+            </div>
+        </form>
     </div>
-    {% else %}
-    <p class="text-center text-gray-500 my-4">No programs found.</p>
-    {% endif %}
+
+    <div class="bg-white shadow rounded-lg">
+        <div class="p-4">
+            {% if programs %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Program Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for program in programs %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ program.program_name }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex space-x-2">
+                                    <a href="{{ url_for('edit_program', program_id=program.id) }}" 
+                                       class="text-blue-600 hover:text-blue-900">Edit</a>
+                                    <button onclick="deleteProgram({{ program.id }})" 
+                                            class="text-red-600 hover:text-red-900">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-center text-gray-500 py-8">No programs found. Try adjusting your search.</p>
+            {% endif %}
+        </div>
+        
+        {% if programs %}
+        {{ render_pagination(pagination, 'list_programs', search=search, per_page=per_page) }}
+        {% endif %}
+    </div>
 </div>
-{% endblock %} 
+
+<script>
+function getCsrfToken() {
+    return "{{ csrf_token() }}";
+}
+
+function deleteProgram(id) {
+    if (confirm('Are you sure you want to delete this program?')) {
+        const formData = new FormData();
+        formData.append('csrf_token', getCsrfToken());
+        
+        fetch(`/admin/programs/delete/${id}`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while deleting the program');
+        });
+    }
+}
+
+function applyFilters() {
+    const form = document.getElementById('filterForm');
+    const formData = new FormData(form);
+    const url = new URL(window.location);
+    const searchParams = new URLSearchParams();
+    searchParams.set('page', '1');
+    for (let [key, value] of formData.entries()) {
+        if (value) searchParams.set(key, value);
+    }
+    window.location.href = url.pathname + '?' + searchParams.toString();
+}
+
+function clearFilters() {
+    window.location.href = window.location.pathname;
+}
+</script>
+{% endblock %}
