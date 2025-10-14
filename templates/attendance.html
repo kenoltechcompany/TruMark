@@ -17,18 +17,19 @@
 </style>
 
 <div class="max-w-2xl mx-auto bg-white shadow rounded-lg p-6">
-    <h2 class="text-2xl font-bold mb-6">Mark Attendance for {{ session.name }}</h2>
+    <h2 class="text-2xl font-bold mb-6">Mark Attendance for {{ session.course.course_name }}</h2>
     
     <div class="relative mb-6 camera-container" style="width: 640px; height: 480px; margin: 0 auto;">
         <video id="video" width="640" height="480" autoplay muted class="mx-auto border rounded-lg"></video>
-        <canvas id="overlay" class="absolute top-0 left-0" width="640" height="480"></canvas>
     </div>
     
     <div id="status" class="text-center text-lg mb-4 p-2"></div>
-    <div id="status2" class="text-center text-lg mb-4 p-2"></div>
     <div id="controls" class="text-center space-x-4 mt-4 relative z-10">
         <button id="startButton" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
             Start Camera
+        </button>
+        <button id="captureButton" style="display: none;" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+            Mark Attendance
         </button>
     </div>
 </div>
@@ -36,37 +37,27 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/face-recognition.js') }}"></script>
 <script>
 const video = document.getElementById('video');
-const overlay = document.getElementById('overlay');
 const status = document.getElementById('status');
-const status2 = document.getElementById('status2');
 const startButton = document.getElementById('startButton');
+const captureButton = document.getElementById('captureButton');
 
-let faceCheckInterval;
+let stream = null;
 
 async function startCamera() {
     try {
         status.textContent = 'Initializing camera...';
         status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
         
-        console.log("Checking camera support...");
-        if (!isCameraSupported()) {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             
-            if (isMobile) {
-                if (window.location.protocol === 'http:') {
-                    status.innerHTML = `
-                        <strong>Camera access requires HTTPS on mobile devices.</strong><br>
-                        Please access this application using a secure (HTTPS) connection or try using Chrome/Firefox on a desktop computer.
-                    `;
-                } else {
-                    status.innerHTML = `
-                        <strong>Camera not supported on this mobile browser.</strong><br>
-                        Please try using Chrome, Firefox, or Safari (iOS).
-                    `;
-                }
+            if (isMobile && window.location.protocol === 'http:') {
+                status.innerHTML = `
+                    <strong>Camera access requires HTTPS on mobile devices.</strong><br>
+                    Please access this application using a secure (HTTPS) connection.
+                `;
             } else {
                 status.textContent = 'Camera API not supported on this device or browser';
             }
@@ -75,8 +66,7 @@ async function startCamera() {
             return;
         }
         
-        console.log("Camera supported, requesting access...");
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        stream = await navigator.mediaDevices.getUserMedia({ 
             video: {
                 width: { ideal: 640 },
                 height: { ideal: 480 },
@@ -88,18 +78,17 @@ async function startCamera() {
         
         await new Promise((resolve) => {
             video.onloadedmetadata = () => {
-                console.log("Video metadata loaded");
                 video.play();
                 resolve();
             };
         });
         
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        status.textContent = 'Camera initialized. Please look at the camera.';
+        status.textContent = 'Camera ready. Position your face in the frame and click "Mark Attendance".';
         status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
         
-        startFaceDetection();
+        startButton.style.display = 'none';
+        captureButton.style.display = 'inline-block';
+        
     } catch (error) {
         console.error('Camera error:', error);
         status.textContent = 'Error: ' + error.message;
@@ -107,61 +96,36 @@ async function startCamera() {
     }
 }
 
-async function startFaceDetection() {
+async function captureAndMarkAttendance() {
     try {
+        status.textContent = 'Capturing image...';
+        status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
+        captureButton.disabled = true;
+        
+        // Capture frame from video
         const canvas = document.createElement('canvas');
-        canvas.id = 'overlay';
-        canvas.className = 'absolute top-0 left-0';
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-
-        const existingOverlay = document.getElementById('overlay');
-        existingOverlay.parentNode.replaceChild(canvas, existingOverlay);
-
-        faceCheckInterval = setInterval(async () => {
-            try {
-                const result = await detectFace(video);
-                if (result.detection) {
-                    console.log("Face detected, checking liveness...");
-                    drawFaceDetections(video, canvas, result.detection);
-                    
-                    if (result.isLive) {
-                        status.textContent = 'Live face detected. Processing...';
-                        status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
-
-                        clearInterval(faceCheckInterval);
-                        markAttendance(result.detection);
-                    } else {
-                        status.textContent = 'Please move your head slightly or blink...';
-                        status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
-                    }
-                } else {
-                    console.log("No face detected");
-                    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-                    status.textContent = 'No face detected. Please position your face in the camera.';
-                    status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
-                }
-            } catch (error) {
-                console.error("Error in face detection interval:", error);
-            }
-        }, 100);
-    } catch (error) {
-        console.error("Error in startFaceDetection:", error);
-        status.textContent = 'Error starting face detection: ' + error.message;
-        status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
-    }
-}
-
-async function markAttendance(detection) {
-    try {
-        status.textContent = 'Attempting face recognition...';
-
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        
+        // Convert to base64
+        const imageData = canvas.toDataURL('image/jpeg', 0.95);
+        
+        status.textContent = 'Getting location...';
+        
+        // Get location
         const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject);
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            });
         });
-
-        status.textContent = 'Sending attendance data...';
-
+        
+        status.textContent = 'Processing attendance...';
+        
+        // Send to backend
         const response = await fetch('/api/mark-attendance', {
             method: 'POST',
             headers: {
@@ -170,66 +134,61 @@ async function markAttendance(detection) {
             },
             body: JSON.stringify({
                 session_id: "{{ session.id }}",
-                face_descriptor: Array.from(detection.descriptor),
+                face_image: imageData,
                 latitude: position.coords.latitude,
-                longitude: position.coords.longitude
+                longitude: position.coords.longitude,
+                altitude: position.coords.altitude || 0
             })
         });
-
-        const result = await response.json();        if (result.error) {
+        
+        const result = await response.json();
+        
+        if (result.error) {
             status.textContent = result.error;
             
             if (result.error.includes('already marked')) {
-                // If attendance was already marked, show in blue
                 status.className = 'text-center text-lg mb-4 p-2 bg-blue-100 text-blue-700';
-                
-                // Redirect to success page after 2 seconds
                 setTimeout(() => {
                     window.location.href = `/attendance/success/${encodeURIComponent(result.student_name)}?in_classroom=true&sessionid={{session.id}}`;
                 }, 2000);
             } else if (result.error.includes('Access denied')) {
-                // If student is not in this class, show in red
                 status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
-                
-                // Just stop face detection for wrong class
-                video.srcObject.getTracks().forEach(track => track.stop());
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
             } else {
-                // For other errors (like unrecognized user), show in yellow
                 status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
-                
-                // Restart face detection after 2 seconds if user not recognized
-                setTimeout(() => {
-                    startFaceDetection();
-                }, 2000);
+                captureButton.disabled = false;
             }
         } else {
             status.textContent = `Attendance marked successfully for ${result.student_name}!`;
             status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
-
+            
             // Stop camera
-            video.srcObject.getTracks().forEach(track => track.stop());
-
-            // Redirect to success page with location status
-            window.location.href = `/attendance/success/${encodeURIComponent(result.student_name)}?in_classroom=${result.in_classroom}&sessionid={{session.id}}`;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Redirect to success page
+            setTimeout(() => {
+                window.location.href = `/attendance/success/${encodeURIComponent(result.student_name)}?in_classroom=${result.in_classroom}&sessionid={{session.id}}`;
+            }, 1500);
         }
     } catch (error) {
         console.error('Error:', error);
         status.textContent = 'Error: ' + error.message;
         status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
-        startFaceDetection(); // Restart detection on error
+        captureButton.disabled = false;
     }
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', async () => {
-    status.textContent = 'Loading face recognition models...';
-    const modelsLoaded = await loadModels();
-    if (modelsLoaded) {
-        startButton.disabled = false;
-        status.textContent = 'Ready to start. Click "Start Camera"';
-    }
-});
-
 startButton.addEventListener('click', startCamera);
+captureButton.addEventListener('click', captureAndMarkAttendance);
+
+// Auto-start camera when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    status.textContent = 'Ready to start. Click "Start Camera" when ready.';
+    status.className = 'text-center text-lg mb-4 p-2 bg-blue-100 text-blue-700';
+});
 </script>
 {% endblock %}

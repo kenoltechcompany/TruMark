@@ -13,6 +13,17 @@ from numpy.linalg import norm
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_bcrypt import Bcrypt
+from PIL import Image
+
+# Lazy import face_recognition to avoid startup issues
+face_recognition = None
+
+def get_face_recognition():
+    global face_recognition
+    if face_recognition is None:
+        import face_recognition as fr
+        face_recognition = fr
+    return face_recognition
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -44,7 +55,8 @@ class Student(db.Model):
     firstname = db.Column(db.String(100), nullable=False)
     lastname = db.Column(db.String(100), nullable=False)
     othernames = db.Column(db.String(100), nullable=True)
-    face_encoding = db.Column(db.Text, nullable=True)
+    face_encoding = db.Column(db.Text, nullable=True)  # Stores the averaged face encoding from multiple images
+    face_images = db.Column(db.Text, nullable=True)  # Stores paths to the 5 face images as JSON
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
     current_class = db.relationship('Class', backref='students')
@@ -231,55 +243,97 @@ def admin_rediret():
 def new_student():
     if request.method == 'POST':
         try:
-            if request.content_type == 'application/json':
-                data = request.get_json(force=True)
-            else:
-                data = request.form.to_dict()
+            # Lazy load face_recognition
+            fr = get_face_recognition()
+            
+            # Get form data
+            student_id = request.form.get('student_id')
+            firstname = request.form.get('firstname')
+            lastname = request.form.get('lastname')
+            othernames = request.form.get('othernames', '')
+            class_id = request.form.get('class_id')
+            
+            # Validate student ID format
+            if not student_id or not student_id.isdigit() or len(student_id) != 10:
+                return jsonify({'success': False, 'error': 'Invalid student ID format. Must be 10 digits'}), 400
             
             # Check if the student ID already exists
-            existing_student = Student.query.filter_by(student_id=data.get('student_id')).first()
+            existing_student = Student.query.filter_by(student_id=student_id).first()
             if existing_student:
                 return jsonify({'success': False, 'error': 'Student ID already exists'}), 400
             
-            # Validate student ID format
-            student_id = data.get('student_id', '')
-            if not student_id.isdigit() or len(student_id) != 10:
-                return jsonify({'success': False, 'error': 'Invalid student ID format. Must be 10 digits'}), 400
+            # Get the uploaded face images (should be 5 images)
+            face_images = request.files.getlist('face_images')
             
-            # Get face descriptor and ensure it's properly formatted
-            face_descriptor = data.get('face_descriptor', [])
-            if isinstance(face_descriptor, str):
-                face_descriptor = face_descriptor.strip("'")
-                face_descriptor = json.loads(face_descriptor)
+            if len(face_images) != 5:
+                return jsonify({'success': False, 'error': f'Expected 5 face images, got {len(face_images)}'}), 400
             
-            # Ensure it's a valid list of floats
-            face_descriptor = [float(x) for x in face_descriptor]
+            # Create directory for this student's images
+            student_folder = os.path.join(app.config['UPLOAD_FOLDER'], f'student_{student_id}')
+            os.makedirs(student_folder, exist_ok=True)
             
-            # Store as a clean JSON string
-            face_encoding = json.dumps(face_descriptor)
+            # Process and save images, extract face encodings
+            face_encodings = []
+            image_paths = []
+            
+            for idx, image_file in enumerate(face_images):
+                if image_file and image_file.filename:
+                    # Save the image
+                    filename = secure_filename(f'face_{idx + 1}.jpg')
+                    filepath = os.path.join(student_folder, filename)
+                    image_file.save(filepath)
+                    image_paths.append(filepath)
+                    
+                    # Load the image and extract face encoding
+                    image = fr.load_image_file(filepath)
+                    encodings = fr.face_encodings(image)
+                    
+                    if len(encodings) > 0:
+                        face_encodings.append(encodings[0])
+                    else:
+                        # Clean up and return error
+                        import shutil
+                        shutil.rmtree(student_folder)
+                        return jsonify({'success': False, 'error': f'No face detected in image {idx + 1}'}), 400
+            
+            if len(face_encodings) == 0:
+                # Clean up and return error
+                import shutil
+                shutil.rmtree(student_folder)
+                return jsonify({'success': False, 'error': 'No faces detected in any image'}), 400
+            
+            # Average the face encodings for better recognition
+            avg_encoding = np.mean(face_encodings, axis=0)
+            
+            # Create the student record
             student = Student(
                 student_id=student_id,
-                firstname=data.get('firstname', 'Unknown'),
-                lastname=data.get('lastname', 'Unknown'),
-                othernames=data.get('othernames', 'Unknown'),
-                face_encoding=face_encoding,
-                class_id = data.get("class_id")
+                firstname=firstname,
+                lastname=lastname,
+                othernames=othernames,
+                face_encoding=json.dumps(avg_encoding.tolist()),
+                face_images=json.dumps(image_paths),
+                class_id=class_id
             )
             
             db.session.add(student)
             db.session.commit()
-        
-            return jsonify({'success': True, 'message': 'Student added successfully!'})
+            
+            return jsonify({'success': True, 'message': 'Student enrolled successfully!'})
+            
         except Exception as e:
             print(f"Error saving student: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 400
-      # Handle class list based on user role
+    
+    # Handle class list based on user role
     if current_user.is_admin:
         classes = Class.query.all()
     elif current_user.is_lecturer:
         classes = current_user.teaching_classes
     else:  # for class reps
-        classes = [current_user.cur_class] if current_user.cur_class else []
+        classes = [current_user.current_class] if current_user.current_class else []
     
     return render_template('admin/students/new.html', 
                          classes=classes,
@@ -349,56 +403,73 @@ def attendance(session_id):
     session = Session.query.get_or_404(session_id)
     return render_template('attendance.html', session=session)
 
-def find_matching_student(face_descriptor, threshold=0.35):
-    students = Student.query.filter(Student.face_encoding.isnot(None)).all()
-    
-    print(f"Total students with face encodings: {len(students)}")
-    
-    best_match = None
-    best_distance = float('inf')
-    
-    # Convert input face_descriptor to numpy array if it isn't already
-    face_descriptor = np.array(face_descriptor, dtype=np.float64)
-    
-    for student in students:
-        name = f"{student.firstname} {student.lastname}"
-        print(f"Processing student: {name}")
-        try:
-            # Parse the stored face encoding from JSON string to numpy array
-            stored_descriptor = np.array(json.loads(student.face_encoding.strip("'")), dtype=np.float64)
-            
-            # Calculate distance
-            distance = norm(face_descriptor - stored_descriptor)
-            print(f"Distance for {name}: {distance}")
-            
-            if distance < threshold and distance < best_distance:
-                best_distance = distance
-                best_match = student
-                
-        except Exception as e:
-            print(f"Error processing student {name}: {str(e)}")
-            # Try to clean up the stored encoding and retry
+def find_matching_student(face_image_data, tolerance=0.6):
+    """
+    Find a matching student using face recognition.
+    face_image_data: base64 encoded image data
+    tolerance: Lower is more strict (default 0.6)
+    """
+    try:
+        # Lazy load face_recognition
+        fr = get_face_recognition()
+        
+        # Decode the base64 image
+        image_data = base64.b64decode(face_image_data.split(',')[1] if ',' in face_image_data else face_image_data)
+        image = Image.open(BytesIO(image_data))
+        
+        # Convert PIL image to numpy array
+        image_np = np.array(image)
+        
+        # Get face encoding from the captured image
+        face_encodings = fr.face_encodings(image_np)
+        
+        if len(face_encodings) == 0:
+            print("No face detected in the captured image")
+            return None
+        
+        captured_encoding = face_encodings[0]
+        
+        # Get all students with face encodings
+        students = Student.query.filter(Student.face_encoding.isnot(None)).all()
+        
+        print(f"Comparing against {len(students)} students")
+        
+        best_match = None
+        best_distance = float('inf')
+        
+        for student in students:
             try:
-                # Remove any extra quotes and spaces
-                cleaned_encoding = student.face_encoding.strip("'").replace("'", '"')
-                stored_descriptor = np.array(json.loads(cleaned_encoding), dtype=np.float64)
+                # Parse the stored face encoding
+                stored_encoding = np.array(json.loads(student.face_encoding), dtype=np.float64)
                 
-                distance = norm(face_descriptor - stored_descriptor)
-                print(f"Distance for {name} (after cleanup): {distance}")
+                # Use face_recognition's compare_faces for better accuracy
+                matches = fr.compare_faces([stored_encoding], captured_encoding, tolerance=tolerance)
                 
-                if distance < threshold and distance < best_distance:
-                    best_distance = distance
-                    best_match = student
-            except Exception as e2:
-                print(f"Failed second attempt for {name}: {str(e2)}")
+                if matches[0]:
+                    # Calculate distance for ranking
+                    distance = fr.face_distance([stored_encoding], captured_encoding)[0]
+                    print(f"Match found: {student.firstname} {student.lastname} with distance: {distance}")
+                    
+                    if distance < best_distance:
+                        best_distance = distance
+                        best_match = student
+                        
+            except Exception as e:
+                print(f"Error processing student {student.firstname} {student.lastname}: {str(e)}")
                 continue
-    
-    if best_match:
-        print(f"\nBest match found: {best_match.firstname} with distance: {best_distance}")
-    else:
-        print("\nNo match found above threshold")
-    
-    return best_match
+        
+        if best_match:
+            print(f"Best match: {best_match.firstname} {best_match.lastname} with distance: {best_distance}")
+        else:
+            print("No match found")
+        
+        return best_match
+        
+    except Exception as e:
+        print(f"Error in find_matching_student: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def point_inside_polygon(point, polygon_coords, altitude, classroom_altitude, tolerance):
     # Check if within vertical tolerance (3 meters by default)
@@ -431,7 +502,7 @@ def point_inside_polygon(point, polygon_coords, altitude, classroom_altitude, to
 def mark_attendance():
     try:
         data = request.json
-        face_descriptor = np.array(data['face_descriptor'])
+        face_image_data = data['face_image']  # Base64 encoded image
         session_id = data['session_id']
         latitude = data['latitude']
         longitude = data['longitude']
@@ -440,13 +511,16 @@ def mark_attendance():
         session = Session.query.get_or_404(session_id)
         classroom = Classroom.query.get_or_404(session.classroom_id)
         
-        # First, find the matching student
-        matched_student = find_matching_student(face_descriptor)
+        # Find the matching student using face recognition
+        matched_student = find_matching_student(face_image_data)
+        
         if not matched_student:
             return jsonify({
                 'error': 'User not recognized',
                 'student_name': 'Unknown'
-            }), 200        # Check if student belongs to the class of this session
+            }), 200
+        
+        # Check if student belongs to the class of this session
         if matched_student.class_id != session.class_id:
             return jsonify({
                 'error': f'Access denied: {matched_student.firstname} {matched_student.lastname} is not registered in this class',
@@ -473,7 +547,7 @@ def mark_attendance():
             polygon_coords.append((lat, lon))
         
         # Check altitude
-        altitude = data.get('altitude', 0)  # Get altitude from request
+        altitude = data.get('altitude', 0)
         altitude = float(altitude) if altitude else 0.0
 
         # Check altitude
@@ -489,21 +563,14 @@ def mark_attendance():
             classroom.altitude_tolerance
         )
         
-        matched_student = find_matching_student(face_descriptor)
-        if not matched_student:
-            return jsonify({
-                'message': 'User not recognized',
-                'student_name': 'Unknown',
-                'in_classroom': is_in_classroom,
-                'altitude_check': altitude_ok
-            }), 200
-    
+        # Create attendance record
         attendance = Attendance(
-                student_id=matched_student.id,
-             session_id=session_id,
-                timestamp=datetime.now(),
+            student_id=matched_student.id,
+            session_id=session_id,
+            timestamp=datetime.now(),
             latitude=latitude,
-            longitude=longitude
+            longitude=longitude,
+            altitude=altitude
         )
         
         db.session.add(attendance)
@@ -518,6 +585,9 @@ def mark_attendance():
             'altitude_check': altitude_ok
         })
     except Exception as e:
+        print(f"Error in mark_attendance: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/attendance/success/<studentname>/')

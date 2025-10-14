@@ -13,7 +13,7 @@
         <div class="grid md:grid-cols-2 gap-6">
             <div>
                 <label class="block text-sm font-medium text-academic-secondary mb-2">Student ID</label>
-                <input type="text"  pattern="[0-9]{10}" name="student_id" required 
+                <input type="text" pattern="[0-9]{10}" name="student_id" required 
                        class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-academic-blue focus:ring-2 focus:ring-academic-blue/20 transition">
             </div>
             
@@ -32,8 +32,8 @@
                 <input type="text" name="othernames"  
                        class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-academic-blue focus:ring-2 focus:ring-academic-blue/20 transition">
             </div>
-            <!-- New Class Selection Field -->
-            <div>                <label for="class_id" class="block text-sm font-medium text-gray-700">Class</label>
+            <div>
+                <label for="class_id" class="block text-sm font-medium text-gray-700">Class</label>
                 <select name="class_id" id="class_id" required
                         {% if user_role.is_rep %}disabled{% endif %}
                         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 {% if user_role.is_rep %}bg-gray-100{% endif %}">
@@ -53,14 +53,38 @@
         </div>
 
         <div class="mb-4">
-            <label class="block text-sm font-medium text-blue-600 font-bold">Face Enrollment</label>
+            <label class="block text-sm font-medium text-blue-600 font-bold mb-3">Face Enrollment (5 Photos Required)</label>
             <div class="border p-3 rounded-lg bg-gray-100">
-                <div class="relative aspect-video rounded-lg overflow-hidden bg-gray-800">
-                    <video width="640" height="480" id="video" class="object-cover" autoplay muted></video>
-                    <canvas id="overlay" class="absolute top-0 left-0" width="640" height="480"></canvas>
+                <div class="relative aspect-video rounded-lg overflow-hidden bg-gray-800 mb-3">
+                    <video id="video" class="w-full h-full object-cover" autoplay muted></video>
                 </div>
-                <div id="status" class="text-center text-lg mb-4 p-2"></div>
-                <input type="hidden" name="face_descriptor" id="face_descriptor">
+                
+                <!-- Progress indicator -->
+                <div class="mb-3">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">Photos captured: <span id="photoCount">0</span>/5</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <!-- Instruction text -->
+                <div id="instruction" class="text-center text-lg font-medium mb-3 p-3 bg-blue-50 rounded-lg text-blue-700">
+                    Click "Start Camera" to begin
+                </div>
+                
+                <!-- Status message -->
+                <div id="status" class="text-center text-sm mb-3 p-2"></div>
+                
+                <!-- Thumbnails of captured photos -->
+                <div id="thumbnails" class="grid grid-cols-5 gap-2 mb-3" style="display: none;">
+                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">1</div>
+                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">2</div>
+                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">3</div>
+                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">4</div>
+                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">5</div>
+                </div>
             </div>
         </div>
 
@@ -69,206 +93,164 @@
                class="px-6 py-2.5 border border-gray-300 rounded-lg text-academic-secondary hover:bg-gray-50 transition-colors">
                 Cancel
             </a>
-            <button type="button" id="readyButton" 
+            <button type="button" id="startCameraButton" 
+                    class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                Start Camera
+            </button>
+            <button type="button" id="captureButton" style="display: none;"
+                    class="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                Capture Photo
+            </button>
+            <button type="submit" id="submitButton" style="display: none;"
                     class="px-6 py-2.5 bg-academic-blue text-white rounded-lg hover:bg-academic-secondary transition-colors flex items-center">
                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                 </svg>
-                <i class="bi bi-camera-video me-2"></i> Complete Enrollment
+                Complete Enrollment
             </button>
         </div>
     </form>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.6.1/dist/face-api.min.js"></script>
-<script src="{{ url_for('static', filename='js/face-recognition.js') }}"></script>
 <script>
 const video = document.getElementById('video');
-const overlay = document.getElementById('overlay');
+const instruction = document.getElementById('instruction');
 const status = document.getElementById('status');
 const form = document.getElementById('studentForm');
-const readyButton = document.getElementById('readyButton');
+const startCameraButton = document.getElementById('startCameraButton');
+const captureButton = document.getElementById('captureButton');
+const submitButton = document.getElementById('submitButton');
+const photoCount = document.getElementById('photoCount');
+const progressBar = document.getElementById('progressBar');
+const thumbnails = document.getElementById('thumbnails');
 
-let faceCheckInterval;
+let capturedImages = [];
+let stream = null;
 
-readyButton.addEventListener('click', () => {
-    status.textContent = 'Loading face recognition models...';
-    loadModels().then(modelsLoaded => {
-        if (modelsLoaded) {
-            status.textContent = 'Ready to start. Initializing camera...';
-            status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
-            initializeCamera();
-        } else {
-            status.textContent = 'Error loading models. Please try again.';
-            status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
-        }
-    });
-});
+const instructions = [
+    "Look straight at the camera",
+    "Turn your head slightly to the LEFT",
+    "Turn your head slightly to the RIGHT",
+    "Tilt your head slightly UP",
+    "Tilt your head slightly DOWN"
+];
 
-async function initializeCamera() {
+startCameraButton.addEventListener('click', async () => {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        stream = await navigator.mediaDevices.getUserMedia({ 
             video: {
-                width: 640,
-                height: 480,
+                width: { ideal: 640 },
+                height: { ideal: 480 },
                 facingMode: 'user'
             }
         });
         video.srcObject = stream;
-        status.textContent = 'Camera initialized. Please look at the camera.';
-        status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
         
-        // Start face detection after camera is initialized
-        video.addEventListener('play', startFaceDetection);
+        startCameraButton.style.display = 'none';
+        captureButton.style.display = 'flex';
+        thumbnails.style.display = 'grid';
+        
+        instruction.textContent = instructions[0];
+        instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-green-50 rounded-lg text-green-700';
+        status.textContent = 'Camera ready. Click "Capture Photo" when ready.';
+        status.className = 'text-center text-sm mb-3 p-2 bg-blue-50 text-blue-700 rounded';
     } catch (error) {
         status.textContent = 'Error accessing camera: ' + error.message;
-        status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
+        status.className = 'text-center text-sm mb-3 p-2 bg-red-50 text-red-700 rounded';
     }
-}
+});
 
-async function startFaceDetection() {
-    try {
-        const canvas = document.createElement('canvas');
-        canvas.id = 'overlay';
-        canvas.className = 'absolute top-0 left-0';
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        // console.log(canvas);
-        const existingOverlay = document.getElementById('overlay');
-        // console.log(existingOverlay);
-        existingOverlay.parentNode.replaceChild(canvas, existingOverlay);
-
-        faceCheckInterval = setInterval(async () => {
-            try {
-                const result = await detectFace(video);
-                if (result && result.detection) {  // Check for detection
-                    console.log("Face detected with descriptor");
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    drawFaceDetections(video, canvas, result.detection);
-                    status.textContent = 'Face detected. Capturing...';
-                    status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
-
-                    // Automatically capture face after 1 second
-                    clearInterval(faceCheckInterval); // Stop further detection
-                    captureFace(result.detection);
-                } else {
-                    console.log("No face detected or no descriptor available");
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    status.textContent = 'No face detected. Please position your face in the camera.';
-                    status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
-                }
-            } catch (error) {
-                console.error("Error in face detection interval:", error);
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                status.textContent = 'Error detecting face. Please try again.';
-                status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
-            }
-        }, 100);
-    } catch (error) {
-        console.error("Error in startFaceDetection:", error);
-        status.textContent = 'Error starting face detection: ' + error.message;
-        status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
-    }
-}
-
-async function captureFace(detection) {
-    try {
-        status.textContent = 'Capturing face data (please stay still)...';
-        status.className = 'text-center text-lg mb-4 p-2 bg-yellow-100 text-yellow-700';
-
-        // Use the descriptor from the detection directly if available
-        let faceDescriptor;
-        if (detection && detection.descriptor) {
-            faceDescriptor = detection.descriptor;
-        } else {
-            // Fallback to getting average descriptor
-            faceDescriptor = await getAverageFaceDescriptor(video);
-        }
+captureButton.addEventListener('click', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    
+    // Convert to blob
+    canvas.toBlob((blob) => {
+        capturedImages.push(blob);
         
-        if (!faceDescriptor) {
-            throw new Error('Could not get a valid face descriptor. Please try again.');
+        // Update thumbnail
+        const thumbnailIndex = capturedImages.length - 1;
+        const thumbnailDiv = thumbnails.children[thumbnailIndex];
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(blob);
+        img.className = 'w-full h-full object-cover rounded';
+        thumbnailDiv.innerHTML = '';
+        thumbnailDiv.appendChild(img);
+        thumbnailDiv.className = 'aspect-square bg-gray-200 rounded border-2 border-green-500';
+        
+        // Update progress
+        photoCount.textContent = capturedImages.length;
+        progressBar.style.width = (capturedImages.length / 5 * 100) + '%';
+        
+        if (capturedImages.length < 5) {
+            instruction.textContent = instructions[capturedImages.length];
+            status.textContent = `Photo ${capturedImages.length} captured! ${5 - capturedImages.length} more to go.`;
+            status.className = 'text-center text-sm mb-3 p-2 bg-green-50 text-green-700 rounded';
+        } else {
+            instruction.textContent = 'All photos captured! Click "Complete Enrollment" to finish.';
+            instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-green-50 rounded-lg text-green-700';
+            captureButton.style.display = 'none';
+            submitButton.style.display = 'flex';
+            
+            // Stop camera
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
         }
+    }, 'image/jpeg', 0.95);
+});
 
-        // Convert descriptor to array if it isn't already
-        const descriptorArray = Array.isArray(faceDescriptor) ? faceDescriptor : Array.from(faceDescriptor);
-
-        if (descriptorArray.length === 0) {
-            throw new Error('Face descriptor is empty. Please try again.');
-        }
-
-        document.getElementById('face_descriptor').value = JSON.stringify(descriptorArray);
-        status.textContent = 'Face captured! Saving student...';
-        status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
-
-        // Use AJAX to submit the form data
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    if (capturedImages.length !== 5) {
+        alert('Please capture all 5 photos before submitting');
+        return;
+    }
+    
+    status.textContent = 'Processing enrollment...';
+    status.className = 'text-center text-sm mb-3 p-2 bg-yellow-50 text-yellow-700 rounded';
+    submitButton.disabled = true;
+    
+    try {
         const formData = new FormData(form);
+        
+        // Add captured images
+        capturedImages.forEach((blob, index) => {
+            formData.append('face_images', blob, `face_${index + 1}.jpg`);
+        });
+        
         const response = await fetch('/admin/students/new', {
             method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token() }}'
-            },
             body: formData
         });
-
+        
         const result = await response.json();
+        
         if (result.success) {
-            status.textContent = 'Student saved successfully!';
-            status.className = 'text-center text-lg mb-4 p-2 bg-green-100 text-green-700';
+            status.textContent = 'Student enrolled successfully!';
+            status.className = 'text-center text-sm mb-3 p-2 bg-green-50 text-green-700 rounded';
             setTimeout(() => {
                 window.location.href = '/admin/dashboard';
             }, 2000);
         } else {
-            throw new Error(result.error || 'Failed to save student');
+            throw new Error(result.error || 'Failed to enroll student');
         }
     } catch (error) {
-        console.error('Error capturing face:', error);
         status.textContent = 'Error: ' + error.message;
-        status.className = 'text-center text-lg mb-4 p-2 bg-red-100 text-red-700';
-        
-        // Reset the detection process so user can try again
-        setTimeout(() => {
-            status.textContent = 'Please try again';
-            startFaceDetection();
-        }, 2000);
+        status.className = 'text-center text-sm mb-3 p-2 bg-red-50 text-red-700 rounded';
+        submitButton.disabled = false;
     }
-}
+});
 </script>
-
-<style>
-.status-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: #6c757d;
-    transition: all 0.3s ease;
-}
-
-#status.processing .status-indicator {
-    background: #ffc107;
-    animation: pulse 1.5s infinite;
-}
-
-#status.success .status-indicator {
-    background: #198754;
-}
-
-#status.error .status-indicator {
-    background: #dc3545;
-}
-
-.status-message {
-    font-weight: 500;
-    transition: all 0.3s ease;
-}
-
-@keyframes pulse {
-    0% { transform: scale(0.95); opacity: 0.8; }
-    50% { transform: scale(1.1); opacity: 1; }
-    100% { transform: scale(0.95); opacity: 0.8; }
-}
-</style>
 {% endblock %}
