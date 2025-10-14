@@ -1,6 +1,18 @@
 from app import Program, Course, Student, User, Class, lecturer_classes
 from app import app, db
 from datetime import datetime
+import argparse
+
+def reset_db():
+    """Drop all tables and recreate them with a fresh schema"""
+    with app.app_context():
+        # Drop all existing tables
+        db.drop_all()
+        
+        # Create all tables with new schema
+        db.create_all()
+        
+        print("Database reset: all tables dropped and recreated with new schema")
 
 def populate_db():
     # Check if admin user already exists
@@ -34,8 +46,15 @@ def populate_db():
     db.session.commit()
 
 
-def init_data():
+def init_data(reset=False):
+    """Initialize database with optional reset
+    
+    Args:
+        reset (bool): If True, drop and recreate all tables before populating data
+    """
     with app.app_context():
+        if reset:
+            reset_db()
         
         # Add sample data into the tables
         populate_db()
@@ -43,5 +62,10 @@ def init_data():
         print("Sample data loaded into database!")
 
 if __name__ == '__main__':
-    init_data() 
+    parser = argparse.ArgumentParser(description='Populate database with sample data')
+    parser.add_argument('--reset', action='store_true', 
+                        help='Reset database (drop all tables and recreate) before populating')
+    args = parser.parse_args()
+    
+    init_data(reset=args.reset) 
 
