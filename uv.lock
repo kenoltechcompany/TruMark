@@ -128,8 +128,7 @@ wheels = [
 [[package]]
 name = "face-recognition-models"
 version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/cf/3b/4fd8c534f6c0d1b80ce0973d01331525538045084c73c153ee6df20224cf/face_recognition_models-0.3.0.tar.gz", hash = "sha256:b79bd200a88c87c9a9d446c990ae71c5a626d1f3730174e6d570157ff1d896cf", size = 100149358, upload-time = "2017-09-28T22:53:52.516Z" }
+source = { git = "https://github.com/ageitgey/face_recognition_models#e67de717267507d1e9246de95692eb8be736ab61" }
 
 [[package]]
 name = "flask"
@@ -548,6 +547,15 @@ wheels = [
 ]
 
 [[package]]
+name = "setuptools"
+version = "80.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/5d/3bf57dcd21979b887f014ea83c24ae194cfcd12b9e0fda66b957c69d1fca/setuptools-80.9.0.tar.gz", hash = "sha256:f36b47402ecde768dbfafc46e8e4207b4360c654f1f3bb84475f0a28628fb19c", size = 1319958, upload-time = "2025-05-27T00:56:51.443Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl", hash = "sha256:062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922", size = 1201486, upload-time = "2025-05-27T00:56:49.664Z" },
+]
+
+[[package]]
 name = "sqlalchemy"
 version = "2.0.27"
 source = { registry = "https://pypi.org/simple" }
@@ -595,6 +603,7 @@ dependencies = [
     { name = "colorama" },
     { name = "dlib" },
     { name = "face-recognition" },
+    { name = "face-recognition-models" },
     { name = "flask" },
     { name = "flask-bcrypt" },
     { name = "flask-cors" },
@@ -614,6 +623,7 @@ dependencies = [
     { name = "pypng" },
     { name = "python-dotenv" },
     { name = "qrcode" },
+    { name = "setuptools" },
     { name = "sqlalchemy" },
     { name = "typing-extensions" },
     { name = "werkzeug" },
@@ -628,6 +638,7 @@ requires-dist = [
     { name = "colorama", specifier = "==0.4.6" },
     { name = "dlib", path = "../../../Downloads/dlib-19.22.99-cp310-cp310-win_amd64.whl" },
     { name = "face-recognition", specifier = ">=1.3.0" },
+    { name = "face-recognition-models", git = "https://github.com/ageitgey/face_recognition_models" },
     { name = "flask", specifier = "==3.0.2" },
     { name = "flask-bcrypt", specifier = "==1.0.1" },
     { name = "flask-cors", specifier = "==5.0.1" },
@@ -647,6 +658,7 @@ requires-dist = [
     { name = "pypng", specifier = "==0.20220715.0" },
     { name = "python-dotenv", specifier = "==1.0.1" },
     { name = "qrcode", specifier = "==7.4.2" },
+    { name = "setuptools", specifier = ">=80.9.0" },
     { name = "sqlalchemy", specifier = "==2.0.27" },
     { name = "typing-extensions", specifier = "==4.12.2" },
     { name = "werkzeug", specifier = "==3.0.1" },
