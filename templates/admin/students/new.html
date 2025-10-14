@@ -79,11 +79,26 @@
                 
                 <!-- Thumbnails of captured photos -->
                 <div id="thumbnails" class="grid grid-cols-5 gap-2 mb-3" style="display: none;">
-                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">1</div>
-                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">2</div>
-                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">3</div>
-                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">4</div>
-                    <div class="aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400">5</div>
+                    <div data-index="0" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">1</span>
+                    </div>
+                    <div data-index="1" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">2</span>
+                    </div>
+                    <div data-index="2" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">3</span>
+                    </div>
+                    <div data-index="3" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">4</span>
+                    </div>
+                    <div data-index="4" class="thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors">
+                        <span class="slot-number">5</span>
+                    </div>
+                </div>
+                
+                <!-- Retake hint -->
+                <div id="retakeHint" class="text-center text-xs text-gray-500 mb-2" style="display: none;">
+                    💡 Click on any photo to retake it
                 </div>
             </div>
         </div>
@@ -130,9 +145,12 @@ const submitButton = document.getElementById('submitButton');
 const photoCount = document.getElementById('photoCount');
 const progressBar = document.getElementById('progressBar');
 const thumbnails = document.getElementById('thumbnails');
+const retakeHint = document.getElementById('retakeHint');
 
-let capturedImages = [];
+let capturedImages = [null, null, null, null, null]; // Array to hold 5 images
+let currentPhotoIndex = 0; // Track which photo we're capturing
 let stream = null;
+let isRetaking = false;
 
 const instructions = [
     "Look straight at the camera",
@@ -142,7 +160,115 @@ const instructions = [
     "Tilt your head slightly DOWN"
 ];
 
-startCameraButton.addEventListener('click', async () => {
+// Function to update UI based on current state
+function updateUI() {
+    const capturedCount = capturedImages.filter(img => img !== null).length;
+    photoCount.textContent = capturedCount;
+    progressBar.style.width = (capturedCount / 5 * 100) + '%';
+    
+    // Show retake hint if at least one photo is captured
+    if (capturedCount > 0) {
+        retakeHint.style.display = 'block';
+    }
+    
+    // Update instruction for current photo
+    if (currentPhotoIndex < 5) {
+        instruction.textContent = instructions[currentPhotoIndex];
+    }
+    
+    // Show submit button only when all 5 photos are captured
+    if (capturedCount === 5) {
+        instruction.textContent = 'All photos captured! Click "Complete Enrollment" to finish.';
+        instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-green-50 rounded-lg text-green-700';
+        captureButton.style.display = 'none';
+        submitButton.style.display = 'flex';
+        
+        // Stop camera when all photos are done (but keep it available for retakes)
+        if (stream && !isRetaking) {
+            stream.getTracks().forEach(track => track.stop());
+            stream = null; // Clear the stream reference
+        }
+    } else {
+        submitButton.style.display = 'none';
+        if (stream) {
+            captureButton.style.display = 'flex';
+        }
+    }
+}
+
+// Function to update thumbnail display
+function updateThumbnail(index, blob) {
+    const thumbnailDiv = thumbnails.children[index];
+    
+    if (blob) {
+        // Clear previous content
+        thumbnailDiv.innerHTML = '';
+        
+        // Create image
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(blob);
+        img.className = 'w-full h-full object-cover rounded';
+        thumbnailDiv.appendChild(img);
+        
+        // Add retake overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-50 flex items-center justify-center transition-all rounded cursor-pointer';
+        overlay.innerHTML = '<span class="text-white opacity-0 hover:opacity-100 text-xs font-bold">RETAKE</span>';
+        thumbnailDiv.style.position = 'relative';
+        thumbnailDiv.appendChild(overlay);
+        
+        thumbnailDiv.className = 'thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-green-500 cursor-pointer';
+    } else {
+        // Reset to empty state
+        const slotNumber = thumbnailDiv.querySelector('.slot-number');
+        if (!slotNumber) {
+            thumbnailDiv.innerHTML = `<span class="slot-number">${index + 1}</span>`;
+        }
+        thumbnailDiv.className = 'thumbnail-slot aspect-square bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-400 cursor-pointer hover:bg-gray-300 transition-colors';
+    }
+}
+
+// Add click handlers to thumbnails for retaking photos
+thumbnails.addEventListener('click', (e) => {
+    const thumbnailSlot = e.target.closest('.thumbnail-slot');
+    if (!thumbnailSlot) return;
+    
+    const index = parseInt(thumbnailSlot.dataset.index);
+    
+    // If clicking on a captured photo, initiate retake
+    if (capturedImages[index] !== null) {
+        if (confirm(`Retake photo ${index + 1}?\n\nInstruction: ${instructions[index]}`)) {
+            retakePhoto(index);
+        }
+    }
+});
+
+function retakePhoto(index) {
+    isRetaking = true;
+    currentPhotoIndex = index;
+    
+    // Clear the image at this index
+    capturedImages[index] = null;
+    updateThumbnail(index, null);
+    
+    // Restart camera if it's not running
+    if (!stream || !stream.active) {
+        startCamera().then(() => {
+            // Update UI after camera starts
+            status.textContent = `Retaking photo ${index + 1}. Position yourself and click "Capture Photo".`;
+            status.className = 'text-center text-sm mb-3 p-2 bg-yellow-50 text-yellow-700 rounded';
+            instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-yellow-50 rounded-lg text-yellow-700';
+        });
+    } else {
+        // Camera is already running, just update UI
+        updateUI();
+        status.textContent = `Retaking photo ${index + 1}. Position yourself and click "Capture Photo".`;
+        status.className = 'text-center text-sm mb-3 p-2 bg-yellow-50 text-yellow-700 rounded';
+        instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-yellow-50 rounded-lg text-yellow-700';
+    }
+}
+
+async function startCamera() {
     try {
         stream = await navigator.mediaDevices.getUserMedia({ 
             video: {
@@ -157,7 +283,7 @@ startCameraButton.addEventListener('click', async () => {
         captureButton.style.display = 'flex';
         thumbnails.style.display = 'grid';
         
-        instruction.textContent = instructions[0];
+        instruction.textContent = instructions[currentPhotoIndex];
         instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-green-50 rounded-lg text-green-700';
         status.textContent = 'Camera ready. Click "Capture Photo" when ready.';
         status.className = 'text-center text-sm mb-3 p-2 bg-blue-50 text-blue-700 rounded';
@@ -165,7 +291,9 @@ startCameraButton.addEventListener('click', async () => {
         status.textContent = 'Error accessing camera: ' + error.message;
         status.className = 'text-center text-sm mb-3 p-2 bg-red-50 text-red-700 rounded';
     }
-});
+}
+
+startCameraButton.addEventListener('click', startCamera);
 
 captureButton.addEventListener('click', () => {
     const canvas = document.createElement('canvas');
@@ -176,44 +304,48 @@ captureButton.addEventListener('click', () => {
     
     // Convert to blob
     canvas.toBlob((blob) => {
-        capturedImages.push(blob);
+        // Store image at current index
+        capturedImages[currentPhotoIndex] = blob;
+        updateThumbnail(currentPhotoIndex, blob);
         
-        // Update thumbnail
-        const thumbnailIndex = capturedImages.length - 1;
-        const thumbnailDiv = thumbnails.children[thumbnailIndex];
-        const img = document.createElement('img');
-        img.src = URL.createObjectURL(blob);
-        img.className = 'w-full h-full object-cover rounded';
-        thumbnailDiv.innerHTML = '';
-        thumbnailDiv.appendChild(img);
-        thumbnailDiv.className = 'aspect-square bg-gray-200 rounded border-2 border-green-500';
-        
-        // Update progress
-        photoCount.textContent = capturedImages.length;
-        progressBar.style.width = (capturedImages.length / 5 * 100) + '%';
-        
-        if (capturedImages.length < 5) {
-            instruction.textContent = instructions[capturedImages.length];
-            status.textContent = `Photo ${capturedImages.length} captured! ${5 - capturedImages.length} more to go.`;
-            status.className = 'text-center text-sm mb-3 p-2 bg-green-50 text-green-700 rounded';
+        // Move to next empty slot or stay at current if retaking
+        if (!isRetaking) {
+            currentPhotoIndex++;
         } else {
-            instruction.textContent = 'All photos captured! Click "Complete Enrollment" to finish.';
-            instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-green-50 rounded-lg text-green-700';
-            captureButton.style.display = 'none';
-            submitButton.style.display = 'flex';
-            
-            // Stop camera
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
+            isRetaking = false;
         }
+        
+        // Find next empty slot if not retaking
+        while (currentPhotoIndex < 5 && capturedImages[currentPhotoIndex] !== null && !isRetaking) {
+            currentPhotoIndex++;
+        }
+        
+        const capturedCount = capturedImages.filter(img => img !== null).length;
+        
+        if (capturedCount < 5) {
+            status.textContent = `Photo captured! ${5 - capturedCount} more to go.`;
+            status.className = 'text-center text-sm mb-3 p-2 bg-green-50 text-green-700 rounded';
+            instruction.className = 'text-center text-lg font-medium mb-3 p-3 bg-green-50 rounded-lg text-green-700';
+        } else {
+            // All photos captured - stop camera and show completion message
+            if (stream && stream.active) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            status.textContent = 'All photos captured! You can retake any photo by clicking on it, or complete enrollment.';
+            status.className = 'text-center text-sm mb-3 p-2 bg-green-50 text-green-700 rounded';
+        }
+        
+        // Always update UI after capture
+        updateUI();
     }, 'image/jpeg', 0.95);
 });
 
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    if (capturedImages.length !== 5) {
+    const capturedCount = capturedImages.filter(img => img !== null).length;
+    if (capturedCount !== 5) {
         alert('Please capture all 5 photos before submitting');
         return;
     }
@@ -225,7 +357,7 @@ form.addEventListener('submit', async (e) => {
     try {
         const formData = new FormData(form);
         
-        // Add captured images
+        // Add captured images in order
         capturedImages.forEach((blob, index) => {
             formData.append('face_images', blob, `face_${index + 1}.jpg`);
         });

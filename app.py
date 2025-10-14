@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, send_file, Response
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timedelta
 import qrcode
 import os
 import csv
@@ -48,6 +48,73 @@ login_manager.login_view = 'login'
 # Add bcrypt for password hashing
 bcrypt = Bcrypt(app)
 
+# Helper function to calculate session expiration
+def calculate_expiration(expiration_type, expiration_value, base_time=None):
+    """
+    Calculate the expiration datetime based on type and value.
+    
+    Args:
+        expiration_type: Type of expiration (always_open, fixed_duration, specific_time, custom_range)
+        expiration_value: JSON string with expiration details
+        base_time: Base datetime to calculate from (defaults to now)
+    
+    Returns:
+        datetime object or None for always_open
+    """
+    if base_time is None:
+        base_time = datetime.utcnow()
+    
+    if expiration_type == 'always_open':
+        return None
+    
+    if expiration_type == 'instant_expire':
+        return base_time  # Already expired
+    
+    try:
+        value_data = json.loads(expiration_value) if isinstance(expiration_value, str) else expiration_value
+    except:
+        return None
+    
+    if expiration_type == 'fixed_duration':
+        # Format: {"amount": 24, "unit": "hours"}
+        amount = int(value_data.get('amount', 0))
+        unit = value_data.get('unit', 'hours')
+        
+        if unit == 'minutes':
+            return base_time + timedelta(minutes=amount)
+        elif unit == 'hours':
+            return base_time + timedelta(hours=amount)
+        elif unit == 'days':
+            return base_time + timedelta(days=amount)
+    
+    elif expiration_type == 'specific_time':
+        # Format: {"time": "14:30"}  (today at 2:30 PM)
+        time_str = value_data.get('time', '')
+        if time_str:
+            hour, minute = map(int, time_str.split(':'))
+            target = base_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # If the time has already passed today, use tomorrow
+            if target <= base_time:
+                target += timedelta(days=1)
+            
+            return target
+    
+    elif expiration_type == 'custom_range':
+        # Format: {"start": "09:00", "end": "17:00"}
+        end_time = value_data.get('end', '')
+        if end_time:
+            hour, minute = map(int, end_time.split(':'))
+            target = base_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # If the time has already passed today, use tomorrow
+            if target <= base_time:
+                target += timedelta(days=1)
+            
+            return target
+    
+    return None
+
 # Models
 class Student(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -77,6 +144,43 @@ class Session(db.Model):
     course = db.relationship('Course', backref='sessions')
     current_class = db.relationship('Class', backref='sessions')
     active = db.Column(db.Boolean, default=True)
+    
+    # Expiration fields
+    expiration_type = db.Column(db.String(50), default='always_open')  # always_open, fixed_duration, specific_time, custom_range
+    expiration_value = db.Column(db.String(100), nullable=True)  # Stores duration or time details as JSON
+    expires_at = db.Column(db.DateTime, nullable=True)  # Calculated expiration timestamp
+    
+    def is_expired(self):
+        """Check if the session has expired"""
+        if self.expiration_type == 'always_open':
+            return False
+        
+        if self.expires_at is None:
+            return False
+        
+        return datetime.utcnow() > self.expires_at
+    
+    def get_expiration_display(self):
+        """Get a human-readable expiration description"""
+        if self.expiration_type == 'always_open':
+            return 'Always Open'
+        
+        if self.is_expired():
+            return 'Expired'
+        
+        if self.expires_at:
+            time_left = self.expires_at - datetime.utcnow()
+            if time_left.total_seconds() < 3600:  # Less than 1 hour
+                minutes = int(time_left.total_seconds() / 60)
+                return f'Expires in {minutes} minutes'
+            elif time_left.total_seconds() < 86400:  # Less than 1 day
+                hours = int(time_left.total_seconds() / 3600)
+                return f'Expires in {hours} hours'
+            else:
+                days = int(time_left.total_seconds() / 86400)
+                return f'Expires in {days} days'
+        
+        return 'Unknown'
 
 class Attendance(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -356,6 +460,32 @@ def new_session():
         # For class reps, use their assigned class
         lecturer = User.query.get(request.form['lecturer_id'])
         class_id = int(current_user.class_id if current_user.is_rep else request.form['class_id'])
+        
+        # Get expiration settings
+        expiration_type = request.form.get('expiration_type', 'always_open')
+        expiration_value = None
+        expires_at = None
+        
+        if expiration_type == 'fixed_duration':
+            amount = request.form.get('duration_amount', '24')
+            unit = request.form.get('duration_unit', 'hours')
+            expiration_value = json.dumps({'amount': amount, 'unit': unit})
+            expires_at = calculate_expiration(expiration_type, expiration_value)
+        
+        elif expiration_type == 'specific_time':
+            time_value = request.form.get('specific_time', '23:59')
+            expiration_value = json.dumps({'time': time_value})
+            expires_at = calculate_expiration(expiration_type, expiration_value)
+        
+        elif expiration_type == 'custom_range':
+            start_time = request.form.get('range_start', '00:00')
+            end_time = request.form.get('range_end', '23:59')
+            expiration_value = json.dumps({'start': start_time, 'end': end_time})
+            expires_at = calculate_expiration(expiration_type, expiration_value)
+        
+        elif expiration_type == 'instant_expire':
+            expires_at = datetime.utcnow()  # Already expired
+        
         session = Session(
             semester=request.form['semester'],
             week=request.form['week'],
@@ -363,7 +493,10 @@ def new_session():
             classroom_id=request.form['classroom_id'],
             class_id=class_id,
             course_id=request.form['course_id'],
-            lecturer_id=request.form['lecturer_id']
+            lecturer_id=request.form['lecturer_id'],
+            expiration_type=expiration_type,
+            expiration_value=expiration_value,
+            expires_at=expires_at
         )
         
         # Verify lecturer teaches this class
@@ -386,7 +519,7 @@ def new_session():
 
     else:
         # For class reps, only show their class and its assigned lecturers
-        classes = [current_user.cur_class]
+        classes = [current_user.current_class]
         lecturers = User.query.filter(
             User.is_lecturer == True,
             User.teaching_classes.any(id=current_user.class_id)
@@ -401,6 +534,11 @@ def new_session():
 @app.route('/attendance/<int:session_id>')
 def attendance(session_id):
     session = Session.query.get_or_404(session_id)
+    
+    # Check if session has expired
+    if session.is_expired():
+        return render_template('session_expired.html', session=session)
+    
     return render_template('attendance.html', session=session)
 
 def find_matching_student(face_image_data, tolerance=0.6):
@@ -509,6 +647,14 @@ def mark_attendance():
         
         # Get the session and its classroom
         session = Session.query.get_or_404(session_id)
+        
+        # Check if session has expired
+        if session.is_expired():
+            return jsonify({
+                'error': 'This session has expired. Please contact your course representative or lecturer.',
+                'student_name': 'Session Expired'
+            }), 200
+        
         classroom = Classroom.query.get_or_404(session.classroom_id)
         
         # Find the matching student using face recognition
@@ -701,6 +847,24 @@ def delete_session(session_id):
         db.session.commit()
         
         return jsonify({'success': True, 'message': 'Session deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/admin/sessions/expire/<int:session_id>', methods=['POST'])
+@csrf.exempt
+@login_required
+def expire_session(session_id):
+    """Instantly expire a session"""
+    try:
+        session = Session.query.get_or_404(session_id)
+        
+        # Set expiration to now
+        session.expiration_type = 'instant_expire'
+        session.expires_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Session expired successfully'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 

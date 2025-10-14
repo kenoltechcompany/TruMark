@@ -49,19 +49,50 @@ TruMark is a Flask-based web application for managing student attendance using f
 
 ### Core Application Flow: Marking Attendance
 
-1.  An admin or lecturer creates a `Session`.
+1.  An admin or lecturer creates a `Session` with expiration settings.
 2.  The system generates a QR code for the session, which links to the attendance page (`/attendance/<session_id>`).
 3.  A student scans the QR code, opening the attendance page.
-4.  The student clicks "Start Camera" and positions their face in the frame.
-5.  The student clicks "Mark Attendance" to capture a photo.
-6.  The frontend captures a single image and the device's GPS coordinates, then sends both to `/api/mark-attendance`.
-7.  The backend's `mark_attendance` function:
+4.  The system checks if the session has expired - if so, displays `session_expired.html`.
+5.  The student clicks "Start Camera" and positions their face in the frame.
+6.  The student clicks "Mark Attendance" to capture a photo.
+7.  The frontend captures a single image and the device's GPS coordinates, then sends both to `/api/mark-attendance`.
+8.  The backend's `mark_attendance` function:
+    - Checks if the session has expired and rejects if so
     - Decodes the base64 image
     - Uses `face_recognition.face_encodings()` to extract face encoding from the captured image
     - Calls `find_matching_student()` which uses `face_recognition.compare_faces()` to match against all stored student encodings
     - Verifies the student belongs to the correct class for the session
     - Checks if the student's GPS coordinates fall within the classroom's defined polygon using `point_inside_polygon`
     - Records the attendance in the `Attendance` table
+
+### Session Expiration System
+
+The application includes a comprehensive session expiration system with multiple time options:
+
+1.  **Expiration Types:**
+    - `always_open`: Session never expires (default for legacy sessions)
+    - `fixed_duration`: Expires after a specified duration (e.g., next 24 hours, 30 minutes, 7 days)
+    - `specific_time`: Expires at a specific time today (or tomorrow if time has passed)
+    - `custom_range`: Available only during a specific time window (e.g., 8 AM to 5 PM)
+    - `instant_expire`: Admin/lecturer can manually expire a session immediately
+
+2.  **Creating Sessions with Expiration:**
+    - When creating a session at `/admin/sessions/new`, users can select expiration type
+    - The form provides quick presets (30 mins, 1 hour, 2 hours, 24 hours, 2 days, 1 week, until 5 PM, until 11:59 PM)
+    - Dynamic form fields appear based on selected expiration type
+    - The `calculate_expiration()` function computes the `expires_at` datetime based on type and value
+
+3.  **Expiration Checking:**
+    - `Session.is_expired()` method checks if current time is past `expires_at`
+    - `Session.get_expiration_display()` returns human-readable time remaining
+    - The `/attendance/<session_id>` route checks expiration before rendering
+    - The `/api/mark-attendance` endpoint rejects expired sessions with error message
+    - Sessions list shows expiration status badges (Always Open, Time Remaining, or Expired)
+
+4.  **Manual Expiration:**
+    - Admins and lecturers can instantly expire a session using the "Expire Now" button
+    - The `/admin/sessions/expire/<session_id>` route sets `expires_at` to current time
+    - Expired sessions still appear in the list but cannot be used for marking attendance
 
 ## 3. Code Conventions & Patterns
 
