@@ -6,8 +6,8 @@ import os
 # Base directory of the application
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-# Secret key for session management
-SECRET_KEY = 'your-secret-key-here'
+# Secret key for session management - MUST be set in .env for production
+SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Get environment, default to development
 ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')

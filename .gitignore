@@ -3,22 +3,55 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
 
 # Environment
 .env
+.env.*
 venv/
 .venv/
+env/
+ENV/
 
 # Database
 instance/
+*.db
+*.sqlite
+*.sqlite3
 
-# Uploads
+# Uploads (sensitive student data)
 uploads/
 
 # Logs
 *.log
 log.txt
+logs/
 
 # OS generated files
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Backup files
+*.bak
+*.backup
+backup_*/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

@@ -542,14 +542,9 @@ def generate_registration_token():
     if request.method == 'POST':
         try:
             class_id = request.form.get('class_id')
-            sys.stdout.flush()  # Force flush output
-            print(f"DEBUG: Received class_id: '{class_id}' (type: {type(class_id)})", flush=True)
-            print(f"DEBUG: Form data: {request.form}", flush=True)
-            print(f"DEBUG: Current user: {current_user.username}, is_admin: {current_user.is_admin}, is_lecturer: {current_user.is_lecturer}, is_rep: {current_user.is_rep}", flush=True)
             
             # Validate that class_id was provided and not empty
             if not class_id or class_id == '':
-                print("DEBUG: class_id is empty or None", flush=True)
                 return jsonify({'success': False, 'error': 'Please select a class'}), 400
             
             # class_id is now a UUID string, no conversion needed
@@ -1934,5 +1929,10 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     
+    # Get debug mode from environment, default to True for development
+    debug_mode = os.getenv('FLASK_DEBUG', 'True').lower() in ('true', '1', 't')
+    
     print("WARNING: For camera access on all devices, this app must be served over HTTPS in production.")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print(f"Running in {'DEBUG' if debug_mode else 'PRODUCTION'} mode")
+    
+    app.run(host='0.0.0.0', port=5000, debug=debug_mode)
