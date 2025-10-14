@@ -1,3 +1,24 @@
-/log.txt
-/venv
-/__pycache__
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.env
+venv/
+.venv/
+
+# Database
+instance/
+
+# Uploads
+uploads/
+
+# Logs
+*.log
+log.txt
+
+# OS generated files
+.DS_Store
+Thumbs.db

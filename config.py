@@ -9,8 +9,16 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 # Secret key for session management
 SECRET_KEY = 'your-secret-key-here'
 
-# PostgreSQL database URI
-SQLALCHEMY_DATABASE_URI = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@dpg-d12p3ch5pdvs73cvvv30-a.oregon-postgres.render.com:5432/{os.getenv('DB_NAME')}"
+# Get environment, default to development
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
+
+# Database configuration
+if ENVIRONMENT == 'production':
+    # PostgreSQL database URI for production
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
+else:
+    # SQLite database for development
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'instance', 'attendance.db')
 
 # Disable SQLAlchemy track modifications (improves performance)
 SQLALCHEMY_TRACK_MODIFICATIONS = False
