@@ -30,7 +30,13 @@
             </p>
             {% if creator %}
             <p class="text-sm text-gray-600 mt-2">
-                This link was created by: <strong>{{ creator.firstname }} {{ creator.lastname }}</strong>
+                This link was created by: <strong>
+                    {% if creator.firstname and creator.lastname %}
+                        {{ creator.firstname }} {{ creator.lastname }}
+                    {% else %}
+                        {{ creator.username }}
+                    {% endif %}
+                </strong>
             </p>
             {% endif %}
         </div>

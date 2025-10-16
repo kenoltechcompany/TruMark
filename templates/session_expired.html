@@ -47,7 +47,11 @@
                         <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                             <dt class="text-sm font-medium text-gray-500">Lecturer</dt>
                             <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                                {{ session.lecturer.firstname }} {{ session.lecturer.lastname }}
+                                {% if session.lecturer.firstname and session.lecturer.lastname %}
+                                    {{ session.lecturer.firstname }} {{ session.lecturer.lastname }}
+                                {% else %}
+                                    {{ session.lecturer.username }}
+                                {% endif %}
                             </dd>
                         </div>
                         <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">

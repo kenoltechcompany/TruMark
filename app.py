@@ -619,6 +619,7 @@ def generate_registration_token():
     return render_template('admin/registration_tokens/generate.html', classes=classes)
 
 @app.route('/admin/registration-tokens/toggle/<token_id>', methods=['POST'])
+@csrf.exempt
 @login_required
 def toggle_registration_token(token_id):
     """Toggle registration token active status"""
@@ -646,6 +647,7 @@ def toggle_registration_token(token_id):
     })
 
 @app.route('/admin/registration-tokens/delete/<token_id>', methods=['POST'])
+@csrf.exempt
 @login_required
 def delete_registration_token(token_id):
     """Delete a registration token"""
@@ -1177,6 +1179,56 @@ def expire_session(session_id):
         return jsonify({'success': True, 'message': 'Session expired successfully'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/admin/sessions/restore/<session_id>', methods=['GET', 'POST'])
+@login_required
+def restore_session(session_id):
+    """Restore an expired session with new expiration settings"""
+    if not (current_user.is_admin or current_user.is_lecturer):
+        flash('Access denied')
+        return redirect(url_for('admin_dashboard'))
+    
+    session = Session.query.get_or_404(session_id)
+    
+    # Verify access for lecturers
+    if current_user.is_lecturer and session.lecturer_id != current_user.id:
+        flash('Access denied')
+        return redirect(url_for('admin_dashboard'))
+    
+    if request.method == 'POST':
+        # Get new expiration settings
+        expiration_type = request.form.get('expiration_type', 'always_open')
+        expiration_value = None
+        expires_at = None
+        
+        if expiration_type == 'fixed_duration':
+            amount = request.form.get('duration_amount', '24')
+            unit = request.form.get('duration_unit', 'hours')
+            expiration_value = json.dumps({'amount': amount, 'unit': unit})
+            expires_at = calculate_expiration(expiration_type, expiration_value)
+        
+        elif expiration_type == 'specific_time':
+            time_value = request.form.get('specific_time', '23:59')
+            expiration_value = json.dumps({'time': time_value})
+            expires_at = calculate_expiration(expiration_type, expiration_value)
+        
+        elif expiration_type == 'custom_range':
+            start_time = request.form.get('range_start', '00:00')
+            end_time = request.form.get('range_end', '23:59')
+            expiration_value = json.dumps({'start': start_time, 'end': end_time})
+            expires_at = calculate_expiration(expiration_type, expiration_value)
+        
+        # Update session expiration
+        session.expiration_type = expiration_type
+        session.expiration_value = expiration_value
+        session.expires_at = expires_at
+        
+        db.session.commit()
+        flash('Session restored successfully')
+        return redirect(url_for('list_sessions'))
+    
+    # GET request - show restore form
+    return render_template('admin/sessions/restore.html', session=session)
 
 @app.route('/admin/users')
 @login_required
@@ -1792,26 +1844,70 @@ def delete_class(class_id):
 @app.route('/admin/sessions/edit/<session_id>', methods=['GET', 'POST'])
 @login_required
 def edit_session(session_id):
-    if not current_user.is_admin:
+    if not (current_user.is_admin or current_user.is_lecturer):
         flash('Access denied')
         return redirect(url_for('admin_dashboard'))
     
     session = Session.query.get_or_404(session_id)
     
+    # Verify access for lecturers
+    if current_user.is_lecturer and session.lecturer_id != current_user.id:
+        flash('Access denied')
+        return redirect(url_for('admin_dashboard'))
+    
     if request.method == 'POST':
-        session.name = request.form['name']
+        # Update basic session info
+        session.semester = request.form['semester']
+        session.week = request.form['week']
         session.date = datetime.strptime(request.form['date'], '%Y-%m-%d')
         session.classroom_id = request.form['classroom_id']
+        session.course_id = request.form['course_id']
         session.lecturer_id = request.form['lecturer_id']
+        
+        # Update expiration settings
+        expiration_type = request.form.get('expiration_type', 'always_open')
+        expiration_value = None
+        expires_at = None
+        
+        if expiration_type == 'fixed_duration':
+            amount = request.form.get('duration_amount', '24')
+            unit = request.form.get('duration_unit', 'hours')
+            expiration_value = json.dumps({'amount': amount, 'unit': unit})
+            expires_at = calculate_expiration(expiration_type, expiration_value)
+        
+        elif expiration_type == 'specific_time':
+            time_value = request.form.get('specific_time', '23:59')
+            expiration_value = json.dumps({'time': time_value})
+            expires_at = calculate_expiration(expiration_type, expiration_value)
+        
+        elif expiration_type == 'custom_range':
+            start_time = request.form.get('range_start', '00:00')
+            end_time = request.form.get('range_end', '23:59')
+            expiration_value = json.dumps({'start': start_time, 'end': end_time})
+            expires_at = calculate_expiration(expiration_type, expiration_value)
+        
+        elif expiration_type == 'instant_expire':
+            expires_at = datetime.utcnow()  # Already expired
+        
+        session.expiration_type = expiration_type
+        session.expiration_value = expiration_value
+        session.expires_at = expires_at
+        
         db.session.commit()
         flash('Session updated successfully')
         return redirect(url_for('list_sessions'))
     
+    # GET request - show the form
     classrooms = Classroom.query.all()
+    courses = Course.query.all()
+    classes = Class.query.all()
     lecturers = User.query.filter_by(is_lecturer=True).all()
+    
     return render_template('admin/sessions/edit.html', 
                          session=session,
                          classrooms=classrooms,
+                         courses=courses,
+                         classes=classes,
                          lecturers=lecturers)
 
 # Add new association table for lecturer-class relationship

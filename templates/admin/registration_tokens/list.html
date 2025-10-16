@@ -92,7 +92,7 @@
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" 
                                        {% if token.is_active %}checked{% endif %}
-                                       onchange="toggleToken({{ token.id }})"
+                                       onchange="toggleToken('{{ token.id }}')"
                                        class="sr-only peer">
                                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                                 <span class="ml-3 text-sm font-medium" id="status-text-{{ token.id }}">
@@ -109,7 +109,7 @@
                             <div class="text-sm text-gray-500">by {{ token.creator.username }}</div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button onclick="deleteToken({{ token.id }})"
+                            <button onclick="deleteToken('{{ token.id }}')"
                                     class="text-red-600 hover:text-red-900">
                                 Delete
                             </button>
@@ -151,11 +151,6 @@
 </div>
 
 <script>
-// Get CSRF token from meta tag or cookie
-function getCsrfToken() {
-    return "{{ csrf_token() }}";
-}
-
 function copyToClipboard(elementId) {
     const input = document.getElementById(elementId);
     input.select();
@@ -194,12 +189,11 @@ async function shareLink(url) {
 }
 
 function toggleToken(tokenId) {
-    const formData = new FormData();
-    formData.append('csrf_token', getCsrfToken());
-    
     fetch(`/admin/registration-tokens/toggle/${tokenId}`, {
         method: 'POST',
-        body: formData
+        headers: {
+            'Content-Type': 'application/json'
+        }
     })
     .then(response => response.json())
     .then(data => {
@@ -212,22 +206,25 @@ function toggleToken(tokenId) {
             }
         } else {
             alert('Error: ' + data.error);
+            // Revert the checkbox state
+            location.reload();
         }
     })
     .catch(error => {
         console.error('Error:', error);
         alert('An error occurred while toggling the registration link');
+        // Revert the checkbox state
+        location.reload();
     });
 }
 
 function deleteToken(tokenId) {
     if (confirm('Are you sure you want to delete this registration link? This action cannot be undone.')) {
-        const formData = new FormData();
-        formData.append('csrf_token', getCsrfToken());
-        
         fetch(`/admin/registration-tokens/delete/${tokenId}`, {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            }
         })
         .then(response => response.json())
         .then(data => {
