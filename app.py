@@ -1451,8 +1451,8 @@ def delete_classroom(classroom_id):
 @app.route('/qrcode/<session_id>')
 def generate_qrcode(session_id):
     try:
-        # Generate dynamic attendance URL
-        attendance_url = url_for('mark_attendance', session_id=session_id, _external=True)
+        # Generate dynamic attendance URL - points to the attendance page, not API
+        attendance_url = url_for('attendance', session_id=session_id, _external=True)
         
         # Create QR code
         img = qrcode.make(attendance_url)
