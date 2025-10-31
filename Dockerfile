@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libgomp1 \
     libwebp-dev \
-    libwebp6\
+    libwebp7 \
     wget \
     curl \
     git \
