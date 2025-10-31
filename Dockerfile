@@ -36,8 +36,7 @@ COPY requirements.txt .
 
 # Install Python dependencies
 # Install dlib from prebuilt wheel first, then other packages
-RUN pip install --no-cache-dir https://github.com/alvinregin/dlib-wheels/releases/download/v20.0.0/dlib-20.0.0-cp311-cp311-linux_x86_64.whl && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
