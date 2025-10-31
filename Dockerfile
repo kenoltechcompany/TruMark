@@ -24,19 +24,23 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    libwebp7 \
+    libwebp6 \
     libwebp-dev \
     wget \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+RUN ldconfig && ls /usr/lib | grep libwebp
+
+
 # Copy requirements file
 COPY requirements.txt .
 
 # Install Python dependencies
 # Install dlib from prebuilt wheel first, then other packages
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir https://github.com/alvinregin/dlib-wheels/releases/download/v20.0.0/dlib-20.0.0-cp311-cp311-linux_x86_64.whl && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
