@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN ldconfig && ls /usr/lib | grep libwebp
+# RUN ldconfig && ls /usr/lib | grep libwebp
 
 
 # Copy requirements file
