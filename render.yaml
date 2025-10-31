@@ -14,21 +14,6 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
-        fromDatabase:
-          name: trumark-db
-          property: connectionString
+        sync: false
     healthCheckPath: /
     autoDeploy: true
-
-  # PostgreSQL Database
-  - type: pserv
-    name: trumark-db
-    plan: free
-    env: docker
-    dockerfilePath: ./Dockerfile.postgres
-
-databases:
-  - name: trumark-db
-    databaseName: trumark
-    user: trumark
-    plan: free

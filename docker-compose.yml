@@ -6,31 +6,13 @@ services:
     build: .
     ports:
       - "5000:5000"
-    environment:
-      - ENVIRONMENT=development
-      - FLASK_DEBUG=True
-      - SECRET_KEY=dev-secret-key-change-in-production
-      - DATABASE_URL=postgresql://trumark:trumark_password@db:5432/trumark
+    env_file:
+      - .env
     volumes:
       # Mount code for hot reload in development
       - .:/app
       # Persist uploads and database
       - ./instance:/app/instance
       - ./uploads:/app/uploads
-    depends_on:
-      - db
     command: flask run --host=0.0.0.0 --port=5000 --debug
 
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_DB=trumark
-      - POSTGRES_USER=trumark
-      - POSTGRES_PASSWORD=trumark_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:

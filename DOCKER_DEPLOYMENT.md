@@ -17,17 +17,14 @@ This guide covers deploying TruMark using Docker, both locally and on Render.
    cd TruMark
    ```
 
-2. **Create `.env` file**
-   ```bash
-   cp .env.example .env
-   ```
+2. **Create `.env` file (if not already present)**
    
-   Edit `.env` and set your values:
+   Your `.env` should already have your NeonDB credentials:
    ```env
    ENVIRONMENT=development
    FLASK_DEBUG=True
    SECRET_KEY=your-secret-key-here
-   DATABASE_URL=postgresql://trumark:trumark_password@db:5432/trumark
+   DATABASE_URL=postgresql://user:password@host.neon.tech/dbname?sslmode=require
    ```
 
 3. **Build and run with Docker Compose**
@@ -37,7 +34,7 @@ This guide covers deploying TruMark using Docker, both locally and on Render.
 
 4. **Access the application**
    - Open http://localhost:5000
-   - PostgreSQL is available at localhost:5432
+   - Database: Uses your NeonDB (from .env)
 
 5. **Initialize the database (first time only)**
    ```bash
@@ -77,26 +74,22 @@ This guide covers deploying TruMark using Docker, both locally and on Render.
      - **Plan**: Free
      - **Dockerfile Path**: ./Dockerfile
 
-3. **Create PostgreSQL Database**
-   - Click "New +" → "PostgreSQL"
-   - **Name**: trumark-db
-   - **Plan**: Free
-   - Copy the **Internal Database URL**
-
-4. **Add Environment Variables to Web Service**
+3. **Add Environment Variables to Web Service**
    Go to your web service → Environment tab:
    ```
    ENVIRONMENT=production
    FLASK_DEBUG=False
    SECRET_KEY=<generate-a-random-key>
-   DATABASE_URL=<paste-internal-database-url>
+   DATABASE_URL=<your-neondb-connection-string>
    ```
+   
+   Get your NeonDB connection string from your `.env` file or NeonDB dashboard.
 
-5. **Deploy**
+4. **Deploy**
    - Render will automatically build and deploy
    - Wait for build to complete (5-10 minutes first time)
 
-6. **Initialize Database**
+5. **Initialize Database**
    - Go to Shell tab in your web service
    - Run: `python pop.py --reset`
 
@@ -115,13 +108,12 @@ This guide covers deploying TruMark using Docker, both locally and on Render.
    - Connect repository
    - Render will automatically:
      - Create web service
-     - Create PostgreSQL database
-     - Link them together
-     - Deploy
+     - Auto-generate `SECRET_KEY`
 
-3. **Update SECRET_KEY**
+3. **Set DATABASE_URL**
    - Go to web service → Environment
-   - Update `SECRET_KEY` with a strong random value
+   - Add `DATABASE_URL` with your NeonDB connection string
+   - Format: `postgresql://user:password@host.neon.tech/dbname?sslmode=require`
 
 4. **Initialize Database**
    - Shell tab → `python pop.py --reset`
