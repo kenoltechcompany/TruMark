@@ -12,26 +12,28 @@ WORKDIR /app
 
 # Install system dependencies required for face_recognition and dlib
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    libopenblas-dev \
-    liblapack-dev \
-    libx11-dev \
-    libgtk-3-dev \
-    libboost-python-dev \
-    libboost-thread-dev \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    libwebp-dev \
-    libwebp7 \
-    wget \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+build-essential \
+cmake \
+libopenblas-dev \
+liblapack-dev \
+libx11-dev \
+libgtk-3-dev \
+libboost-python-dev \
+libboost-thread-dev \
+libsm6 \
+libxext6 \
+libxrender-dev \
+libgomp1 \
+libwebp-dev \
+libwebp7 \
+wget \
+curl \
+git \
+&& rm -rf /var/lib/apt/lists/*
 
-# RUN ldconfig && ls /usr/lib | grep libwebp
+RUN ln -s /usr/lib/x86_64-linux-gnu/libwebp.so.7 /usr/lib/x86_64-linux-gnu/libwebp.so.6
+RUN sudo ldconfig
+RUN apt-get install -y --reinstall imagemagick
 
 
 # Copy requirements file
