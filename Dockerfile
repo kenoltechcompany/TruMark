@@ -33,7 +33,7 @@ git \
 
 RUN ln -s /usr/lib/x86_64-linux-gnu/libwebp.so.7 /usr/lib/x86_64-linux-gnu/libwebp.so.6
 RUN ldconfig
-RUN apt-get install -y --reinstall imagemagick
+# RUN apt-get install -y --reinstall imagemagick
 
 
 # Copy requirements file
