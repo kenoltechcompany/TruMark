@@ -32,7 +32,7 @@ git \
 && rm -rf /var/lib/apt/lists/*
 
 RUN ln -s /usr/lib/x86_64-linux-gnu/libwebp.so.7 /usr/lib/x86_64-linux-gnu/libwebp.so.6
-RUN sudo ldconfig
+RUN ldconfig
 RUN apt-get install -y --reinstall imagemagick
 
 
