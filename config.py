@@ -23,6 +23,23 @@ else:
 # Disable SQLAlchemy track modifications (improves performance)
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+# SQLAlchemy engine options for connection pool and reliability
+# These settings prevent "SSL connection closed unexpectedly" errors with NeonDB
+SQLALCHEMY_ENGINE_OPTIONS = {
+    # Test connections before using them from the pool
+    'pool_pre_ping': True,
+    # Recycle connections after 5 minutes to prevent stale connections
+    'pool_recycle': 300,
+    # Maximum number of connections to keep in the pool
+    'pool_size': 10,
+    # Maximum overflow connections beyond pool_size
+    'max_overflow': 20,
+    # Connection timeout in seconds
+    'connect_args': {
+        'connect_timeout': 10,
+    } if ENVIRONMENT == 'production' else {}
+}
+
 # Upload folder for student face images
 UPLOAD_FOLDER = os.path.join(basedir, 'uploads')
 
