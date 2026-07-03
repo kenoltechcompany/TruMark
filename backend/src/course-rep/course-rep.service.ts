@@ -238,4 +238,45 @@ export class CourseRepService {
     });
     return records;
   }
+
+  /**
+   * Generates a CSV string with attendance data for a session.
+   * Includes all students in the class — those without attendance are marked Absent.
+   */
+  async exportSessionCsv(repId: string, sessionId: string): Promise<string> {
+    const rep = await this.prisma.courseRep.findUnique({
+      where: { id: repId },
+      select: { classId: true },
+    });
+    if (!rep || !rep.classId) throw new NotFoundException('No class assigned.');
+
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { classId: true, name: true },
+    });
+    if (!session || session.classId !== rep.classId) throw new NotFoundException('Session not found.');
+
+    const students = await this.prisma.student.findMany({
+      where: { classId: rep.classId },
+      select: { id: true, fullName: true, indexNumber: true },
+      orderBy: { fullName: 'asc' },
+    });
+
+    const records = await this.prisma.attendanceRecord.findMany({
+      where: { sessionId },
+      select: { studentId: true, confidence: true, createdAt: true },
+    });
+    const recordMap = new Map(records.map((r) => [r.studentId, r]));
+
+    const header = 'Full Name,Index Number,Status,Confidence,Check-In Timestamp';
+    const rows = students.map((s) => {
+      const rec = recordMap.get(s.id);
+      const status = rec ? 'Present' : 'Absent';
+      const conf = rec ? rec.confidence.toFixed(4) : '';
+      const ts = rec ? rec.createdAt.toISOString() : '';
+      return `"${s.fullName}",${s.indexNumber},${status},${conf},${ts}`;
+    });
+
+    return [header, ...rows].join('\r\n');
+  }
 }

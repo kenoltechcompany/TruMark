@@ -1,6 +1,6 @@
 import {
-  Controller, Get, Patch, Post, Delete, Body, Param,
-  UseGuards, UseInterceptors, UploadedFiles, Req,
+  Controller, Get, Patch, Post, Delete, Body, Param, Req, Res,
+  UseGuards, UseInterceptors, UploadedFiles,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -106,5 +106,13 @@ export class CourseRepController {
   @Get('sessions/:sessionId/attendance')
   getAttendance(@Param('sessionId') sessionId: string) {
     return this.courseRepService.getAttendance(sessionId);
+  }
+
+  @Get('sessions/:sessionId/export')
+  async exportCsv(@Param('sessionId') sessionId: string, @Req() req: any, @Res() res: any) {
+    const csv = await this.courseRepService.exportSessionCsv(req.user.id, sessionId);
+    res.header('Content-Type', 'text/csv; charset=utf-8');
+    res.header('Content-Disposition', `attachment; filename=attendance_${sessionId}.csv`);
+    res.send(csv);
   }
 }

@@ -225,12 +225,34 @@ export default function SessionsPage() {
           <div className="bg-white border border-[#D0D7DE] rounded-md shadow-sm p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-semibold text-[#1F2328]">Attendance Records</h3>
-              <button
-                onClick={() => setSelectedSession(null)}
-                className="text-[#656D76] hover:text-[#1F2328] text-lg leading-none"
-              >
-                &times;
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const token = localStorage.getItem('token');
+                    fetch(`/api/course-rep/sessions/${selectedSession}/export`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    })
+                      .then((r) => r.blob())
+                      .then((blob) => {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `attendance_${selectedSession}.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      });
+                  }}
+                  className="bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#F3F4F6] transition-colors"
+                >
+                  Export Session Roster
+                </button>
+                <button
+                  onClick={() => setSelectedSession(null)}
+                  className="text-[#656D76] hover:text-[#1F2328] text-lg leading-none"
+                >
+                  &times;
+                </button>
+              </div>
             </div>
             <DataTable<AttendanceRecord>
               columns={[
