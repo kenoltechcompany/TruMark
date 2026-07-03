@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import FaceClient, { isUnexpected } from '@azure-rest/ai-vision-face';
 import { readFileSync } from 'fs';
 
@@ -7,6 +7,9 @@ import { readFileSync } from 'fs';
  *
  * Manages LargePersonGroups (one per class), person registration with 3 photos,
  * face detection, and identification for attendance check-in.
+ *
+ * Rate limiting: all Azure calls gracefully handle 429 Too Many Requests
+ * by throwing a user-friendly message instead of a generic 500.
  */
 @Injectable()
 export class AzureFaceService {
@@ -26,6 +29,17 @@ export class AzureFaceService {
     this.client = FaceClient(endpoint!, { key: key! });
   }
 
+  /** Throws a friendly message for 429 rate-limit responses. */
+  private handleAzureError(err: { status?: string | number; body?: { error?: { message?: string } } }): never {
+    const status = Number(err?.status);
+    if (status === 429) {
+      throw new ServiceUnavailableException(
+        'The verification server is busy processing other students. Please press check-in again in a few seconds.',
+      );
+    }
+    throw new BadRequestException(err?.body?.error?.message || 'Azure Face API request failed.');
+  }
+
   /**
    * Creates or reuses a LargePersonGroup for the given class.
    * Then creates persons for students missing an azurePersonId,
@@ -43,7 +57,7 @@ export class AzureFaceService {
       .path('/largepersongroups/{largePersonGroupId}', classId)
       .put({ body: { name: className, recognitionModel: 'recognition_04' } });
     if (isUnexpected(groupResult)) {
-      throw new Error(`Failed to create LargePersonGroup: ${groupResult.body.error.message}`);
+      this.handleAzureError(groupResult as any);
     }
 
     const updatedStudents: { id: string; azurePersonId: string }[] = [];
@@ -54,8 +68,7 @@ export class AzureFaceService {
         .path('/largepersongroups/{largePersonGroupId}/persons', classId)
         .post({ body: { name: student.fullName } });
       if (isUnexpected(personResult)) {
-        this.logger.error(`Failed to create person for ${student.fullName}: ${personResult.body.error.message}`);
-        continue;
+        this.handleAzureError(personResult as any);
       }
 
       const personId = personResult.body.personId;
@@ -92,7 +105,7 @@ export class AzureFaceService {
       .path('/largepersongroups/{largePersonGroupId}/train', classId)
       .post();
     if (isUnexpected(trainResult)) {
-      throw new Error(`Training failed: ${trainResult.body.error.message}`);
+      this.handleAzureError(trainResult as any);
     }
 
     this.logger.log(`Training initiated for group ${classId}`);
@@ -103,6 +116,8 @@ export class AzureFaceService {
   /**
    * Detects a face in the image buffer and identifies it against the class's
    * LargePersonGroup. Returns the personId and confidence if a match is found.
+   *
+   * On a 429 rate-limit error, throws a user-friendly exception instead of a 500.
    */
   async identifyFace(
     classId: string,
@@ -121,7 +136,11 @@ export class AzureFaceService {
         },
       });
     if (isUnexpected(detectResult) || !detectResult.body.length) {
-      return null; // No face detected
+      // If the response was unexpected due to a 429, throw friendly error
+      if (isUnexpected(detectResult)) {
+        this.handleAzureError(detectResult as any);
+      }
+      return null; // No face detected (non-rate-limit error)
     }
 
     const faceId = detectResult.body[0].faceId;
@@ -139,6 +158,9 @@ export class AzureFaceService {
         },
       });
     if (isUnexpected(identifyResult) || !identifyResult.body.length) {
+      if (isUnexpected(identifyResult)) {
+        this.handleAzureError(identifyResult as any);
+      }
       return null;
     }
 
