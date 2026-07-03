@@ -1,0 +1,11 @@
+feat: build React frontend with login, dashboard layout, and CRUD pages with DataTable
+
+- Login page with JWT admin authentication
+- Dashboard layout with sidebar navigation
+- Reusable DataTable component (search bar, checkbox selection, bulk actions)
+- CRUD pages for CourseReps, Classes, and Classrooms
+- Classroom form includes GPS lat/lng/radius fields with disabled "Capture GPS" placeholder
+- TanStack Query for data fetching, React Router for navigation
+- All UI follows Shinaa Design System tokens from DESIGN.md
+
+Co-authored-by: CommandCodeBot <noreply@commandcode.ai>

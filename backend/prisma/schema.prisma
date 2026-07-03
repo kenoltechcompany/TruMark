@@ -1,0 +1,56 @@
+// ============================================================
+// TruMark - Attendance system database schema
+// Uses UUIDs for all primary keys. PostgreSQL is the datasource.
+// NOTE: connection URL is configured in prisma.config.ts (not here)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url is configured in prisma.config.ts (Prisma 7+)
+}
+
+/// Admin users who manage the entire system.
+model Admin {
+  id           String   @id @default(uuid()) @db.Uuid
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("admins")
+}
+
+/// Course Representatives who run individual courses.
+model CourseRep {
+  id           String   @id @default(uuid()) @db.Uuid
+  username     String   @unique
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("course_reps")
+}
+
+/// A class/section that students attend.
+model Class {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("classes")
+}
+
+/// A physical classroom location with GPS-based geofencing.
+model Classroom {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  gpsLatitude   Float    @map("gps_latitude")
+  gpsLongitude  Float    @map("gps_longitude")
+  radiusMeters  Int      @map("radius_meters")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("classrooms")
+}
