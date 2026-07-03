@@ -1,0 +1,61 @@
+# ============================================================
+# TruMark — Docker Compose
+# Orchestrates three services:
+#   trumark-db      - PostgreSQL database
+#   trumark-backend - NestJS API server
+#   trumark-frontend - Nginx web server (React SPA)
+# ============================================================
+services:
+
+  trumark-db:
+    image: postgres:16-alpine
+    container_name: trumark-db
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trumark}
+      POSTGRES_USER: ${POSTGRES_USER:-trumark}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trumark_secret}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trumark} -d ${POSTGRES_DB:-trumark}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  trumark-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: trumark-backend
+    restart: unless-stopped
+    depends_on:
+      trumark-db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-trumark}:${POSTGRES_PASSWORD:-trumark_secret}@trumark-db:5432/${POSTGRES_DB:-trumark}?schema=public"
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      AZURE_FACE_ENDPOINT: ${AZURE_FACE_ENDPOINT:-}
+      AZURE_FACE_KEY: ${AZURE_FACE_KEY:-}
+    volumes:
+      - backend_uploads:/app/uploads
+
+  trumark-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: trumark-frontend
+    restart: unless-stopped
+    depends_on:
+      - trumark-backend
+    ports:
+      - "80:80"
+
+volumes:
+  pgdata:
+  backend_uploads:
