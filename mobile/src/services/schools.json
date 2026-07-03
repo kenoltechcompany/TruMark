@@ -1,0 +1,12 @@
+[
+  {
+    "id": "school-1",
+    "name": "Demo University",
+    "backendUrl": "http://localhost:4000"
+  },
+  {
+    "id": "school-2",
+    "name": "State College",
+    "backendUrl": "https://api.trumark-demo.example.com"
+  }
+]

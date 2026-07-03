@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "TruMark",
+    "slug": "trumark",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#F6F8FA"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.trumark.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F6F8FA"
+      },
+      "package": "ai.trumark.app"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}
