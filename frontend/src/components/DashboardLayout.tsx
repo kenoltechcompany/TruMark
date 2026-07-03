@@ -5,6 +5,7 @@ const navItems = [
   { to: '/course-reps', label: 'Course Reps' },
   { to: '/classes', label: 'Classes' },
   { to: '/classrooms', label: 'Classrooms' },
+  { to: '/global-roster', label: 'Global Roster Audit' },
 ];
 
 export default function DashboardLayout() {

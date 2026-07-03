@@ -37,4 +37,29 @@ export class AdminsService {
     await this.findOne(id);
     return this.prisma.admin.delete({ where: { id } });
   }
+
+  /** Returns all students across all classes, with their class name. */
+  async getAllStudents() {
+    return this.prisma.student.findMany({
+      select: {
+        id: true,
+        fullName: true,
+        indexNumber: true,
+        createdAt: true,
+        class: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** Bulk deletes students by ID, also deleting their attendance records. */
+  async purgeStudents(studentIds: string[]) {
+    await this.prisma.attendanceRecord.deleteMany({
+      where: { studentId: { in: studentIds } },
+    });
+    await this.prisma.student.deleteMany({
+      where: { id: { in: studentIds } },
+    });
+    return { deleted: studentIds.length };
+  }
 }

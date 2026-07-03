@@ -9,6 +9,7 @@ import ClassesPage from './pages/classes/ClassesPage';
 import ClassroomsPage from './pages/classrooms/ClassroomsPage';
 import CourseRepDashboardPage from './pages/course-rep-dashboard/CourseRepDashboardPage';
 import SessionsPage from './pages/course-rep-dashboard/SessionsPage';
+import GlobalRosterAuditPage from './pages/GlobalRosterAuditPage';
 import PublicRegistrationPage from './pages/public-registration/PublicRegistrationPage';
 import type { ReactNode } from 'react';
 
@@ -62,6 +63,7 @@ export default function App() {
               <Route path="/course-reps" element={<CourseRepsPage />} />
               <Route path="/classes" element={<ClassesPage />} />
               <Route path="/classrooms" element={<ClassroomsPage />} />
+              <Route path="/global-roster" element={<GlobalRosterAuditPage />} />
             </Route>
 
             {/* CourseRep routes */}
