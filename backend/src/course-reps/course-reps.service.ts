@@ -6,7 +6,7 @@ import * as bcrypt from 'bcryptjs';
 export class CourseRepsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(data: { username: string; email: string; password: string }) {
+  async create(data: { username: string; email: string; password: string; classId?: string }) {
     const existing = await this.prisma.courseRep.findFirst({
       where: { OR: [{ username: data.username }, { email: data.email }] },
     });
@@ -17,14 +17,14 @@ export class CourseRepsService {
 
     const passwordHash = await bcrypt.hash(data.password, 10);
     return this.prisma.courseRep.create({
-      data: { username: data.username, email: data.email, passwordHash },
-      select: { id: true, username: true, email: true, createdAt: true },
+      data: { username: data.username, email: data.email, passwordHash, classId: data.classId },
+      select: { id: true, username: true, email: true, classId: true, createdAt: true },
     });
   }
 
   async findAll() {
     return this.prisma.courseRep.findMany({
-      select: { id: true, username: true, email: true, createdAt: true },
+      select: { id: true, username: true, email: true, classId: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -32,7 +32,7 @@ export class CourseRepsService {
   async findOne(id: string) {
     const rep = await this.prisma.courseRep.findUnique({
       where: { id },
-      select: { id: true, username: true, email: true, createdAt: true },
+      select: { id: true, username: true, email: true, classId: true, createdAt: true },
     });
     if (!rep) throw new NotFoundException('Course rep not found');
     return rep;

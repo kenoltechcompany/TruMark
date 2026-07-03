@@ -3,14 +3,16 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
 
-interface JwtPayload {
+export interface JwtPayload {
   sub: string;
   username: string;
+  role: 'ADMIN' | 'COURSE_REP';
+  classId?: string | null;
 }
 
 /**
  * Passport strategy that validates JWT tokens from the Authorization header.
- * Extracts the admin from the database on every authenticated request.
+ * Attaches { id, username, role, classId } to request.user.
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -23,10 +25,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const admin = await this.prisma.admin.findUnique({ where: { id: payload.sub } });
-    if (!admin) {
-      throw new UnauthorizedException('Admin not found');
+    // Verify the user still exists in the database
+    if (payload.role === 'ADMIN') {
+      const admin = await this.prisma.admin.findUnique({ where: { id: payload.sub } });
+      if (!admin) throw new UnauthorizedException('Admin not found');
+    } else {
+      const rep = await this.prisma.courseRep.findUnique({ where: { id: payload.sub } });
+      if (!rep) throw new UnauthorizedException('CourseRep not found');
     }
-    return { id: admin.id, username: admin.username };
+
+    return {
+      id: payload.sub,
+      username: payload.username,
+      role: payload.role,
+      classId: payload.classId ?? null,
+    };
   }
 }

@@ -1,19 +1,29 @@
 import { Module } from '@nestjs/common';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminsModule } from './admins/admins.module';
 import { CourseRepsModule } from './course-reps/course-reps.module';
 import { ClassesModule } from './classes/classes.module';
 import { ClassroomsModule } from './classrooms/classrooms.module';
+import { CourseRepModule } from './course-rep/course-rep.module';
+import { PublicRegistrationModule } from './public-registration/public-registration.module';
 
 @Module({
   imports: [
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+    }),
     PrismaModule,
     AuthModule,
     AdminsModule,
     CourseRepsModule,
     ClassesModule,
     ClassroomsModule,
+    CourseRepModule,
+    PublicRegistrationModule,
   ],
 })
 export class AppModule {}

@@ -16,7 +16,18 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(username, password);
-      navigate('/course-reps');
+      // After login, token is set — read the role from localStorage JWT
+      const token = localStorage.getItem('token');
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.role === 'COURSE_REP') {
+          navigate('/course-rep-dashboard');
+        } else {
+          navigate('/course-reps');
+        }
+      } else {
+        navigate('/course-reps');
+      }
     } catch {
       setError('Invalid username or password.');
     } finally {
@@ -27,7 +38,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#F6F8FA] flex items-center justify-center">
       <div className="bg-white border border-[#D0D7DE] rounded-md shadow-sm p-6 w-full max-w-sm">
-        <h1 className="text-lg font-semibold text-[#1F2328] mb-4">TruMark — Admin Login</h1>
+        <h1 className="text-lg font-semibold text-[#1F2328] mb-4">TruMark — Login</h1>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="block text-sm text-[#656D76] mb-1">Username</label>

@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CourseRepsService } from './course-reps.service';
-import { IsString, IsEmail, MinLength, IsArray } from 'class-validator';
+import { IsString, IsEmail, MinLength, IsArray, IsOptional } from 'class-validator';
 
 export class CreateCourseRepDto {
   @IsString()
@@ -14,6 +14,10 @@ export class CreateCourseRepDto {
   @IsString()
   @MinLength(6)
   password: string;
+
+  @IsOptional()
+  @IsString()
+  classId?: string;
 }
 
 export class BulkDeleteDto {
