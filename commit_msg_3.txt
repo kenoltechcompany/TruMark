@@ -1,0 +1,10 @@
+feat: Phase 3 - session management API, GPS capture, and mobile app init
+
+- Schema: Session model with class/classroom relations
+- Backend: Session CRUD (create, list, bulk delete) in course-rep module
+- Backend: Public session detail endpoint with dynamic isActive check
+- Frontend: GPS capture wired in Classroom form via browser geolocation API
+- Frontend: Sessions management page with classroom dropdown, DataTable, copy link, QR code
+- Frontend: Tab navigation in CourseRep dashboard (Class Dashboard / Sessions)
+
+Co-authored-by: CommandCodeBot <noreply@commandcode.ai>

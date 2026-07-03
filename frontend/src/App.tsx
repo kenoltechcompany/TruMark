@@ -8,6 +8,7 @@ import CourseRepsPage from './pages/course-reps/CourseRepsPage';
 import ClassesPage from './pages/classes/ClassesPage';
 import ClassroomsPage from './pages/classrooms/ClassroomsPage';
 import CourseRepDashboardPage from './pages/course-rep-dashboard/CourseRepDashboardPage';
+import SessionsPage from './pages/course-rep-dashboard/SessionsPage';
 import PublicRegistrationPage from './pages/public-registration/PublicRegistrationPage';
 import type { ReactNode } from 'react';
 
@@ -32,7 +33,7 @@ function AdminRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Only allows COURSE_REP users. Redirects admins to admin panel. */
+/** Only allows COURSE_REP users. */
 function CourseRepRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, role } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
@@ -72,6 +73,7 @@ export default function App() {
               }
             >
               <Route path="/course-rep-dashboard" element={<CourseRepDashboardPage />} />
+              <Route path="/course-rep-dashboard/sessions" element={<SessionsPage />} />
             </Route>
 
             {/* Default redirect */}

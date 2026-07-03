@@ -6,7 +6,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { CourseRepRoleGuard } from '../guards/course-rep-role.guard';
 import { CourseRepService } from './course-rep.service';
-import { IsString, IsArray, MinLength } from 'class-validator';
+import { IsString, IsArray, MinLength, IsDateString } from 'class-validator';
 
 export class CreateStudentDto {
   @IsString()
@@ -24,6 +24,27 @@ export class BulkDeleteStudentsDto {
   studentIds: string[];
 }
 
+export class CreateSessionDto {
+  @IsString()
+  @MinLength(1)
+  name: string;
+
+  @IsDateString()
+  startTime: string;
+
+  @IsDateString()
+  endTime: string;
+
+  @IsString()
+  classroomId: string;
+}
+
+export class BulkDeleteSessionsDto {
+  @IsArray()
+  @IsString({ each: true })
+  sessionIds: string[];
+}
+
 @UseGuards(AuthGuard('jwt'), CourseRepRoleGuard)
 @Controller('course-rep')
 export class CourseRepController {
@@ -38,6 +59,8 @@ export class CourseRepController {
   toggleRegistration(@Req() req: any) {
     return this.courseRepService.toggleRegistration(req.user.id);
   }
+
+  // ── Students ──
 
   @Post('students')
   @UseInterceptors(FilesInterceptor('images', 3))
@@ -56,5 +79,22 @@ export class CourseRepController {
   @Delete('students/bulk')
   deleteStudents(@Req() req: any, @Body() dto: BulkDeleteStudentsDto) {
     return this.courseRepService.deleteStudents(req.user.id, dto.studentIds);
+  }
+
+  // ── Sessions ──
+
+  @Post('sessions')
+  createSession(@Req() req: any, @Body() dto: CreateSessionDto) {
+    return this.courseRepService.createSession(req.user.id, dto);
+  }
+
+  @Get('sessions')
+  getSessions(@Req() req: any) {
+    return this.courseRepService.getSessions(req.user.id);
+  }
+
+  @Delete('sessions/bulk')
+  deleteSessions(@Req() req: any, @Body() dto: BulkDeleteSessionsDto) {
+    return this.courseRepService.deleteSessions(req.user.id, dto.sessionIds);
   }
 }

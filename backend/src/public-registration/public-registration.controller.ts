@@ -38,4 +38,9 @@ export class PublicRegistrationController {
     const paths = files.map((f) => f.path);
     return this.service.registerStudent(id, dto, paths);
   }
+
+  @Get('sessions/:id')
+  getSession(@Param('id') id: string) {
+    return this.service.getSession(id);
+  }
 }

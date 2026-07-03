@@ -3,5 +3,5 @@
 [cmd]: https://commandcode.ai/
 
 # cli
-- Use bun as the package manager for this project. Confidence: 0.50
+- Use bun as the package manager for this project. Confidence: 0.60
 

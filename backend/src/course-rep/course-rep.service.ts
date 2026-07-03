@@ -106,4 +106,75 @@ export class CourseRepService {
 
     return { deleted: result.count };
   }
+
+  /**
+   * Creates a new session for the CourseRep's class.
+   */
+  async createSession(
+    repId: string,
+    data: { name: string; startTime: string; endTime: string; classroomId: string },
+  ) {
+    const rep = await this.prisma.courseRep.findUnique({
+      where: { id: repId },
+      select: { classId: true },
+    });
+    if (!rep || !rep.classId) {
+      throw new NotFoundException('You have not been assigned a class yet.');
+    }
+
+    const start = new Date(data.startTime);
+    const end = new Date(data.endTime);
+    if (start >= end) {
+      throw new BadRequestException('startTime must be before endTime.');
+    }
+
+    return this.prisma.session.create({
+      data: {
+        name: data.name,
+        startTime: start,
+        endTime: end,
+        classId: rep.classId,
+        classroomId: data.classroomId,
+      },
+      include: { classroom: true },
+    });
+  }
+
+  /**
+   * Returns all sessions for the CourseRep's class, including classroom data.
+   */
+  async getSessions(repId: string) {
+    const rep = await this.prisma.courseRep.findUnique({
+      where: { id: repId },
+      select: { classId: true },
+    });
+    if (!rep || !rep.classId) {
+      throw new NotFoundException('You have not been assigned a class yet.');
+    }
+
+    return this.prisma.session.findMany({
+      where: { classId: rep.classId },
+      include: { classroom: true },
+      orderBy: { startTime: 'desc' },
+    });
+  }
+
+  /**
+   * Bulk deletes sessions by ID — only those belonging to the CourseRep's class.
+   */
+  async deleteSessions(repId: string, sessionIds: string[]) {
+    const rep = await this.prisma.courseRep.findUnique({
+      where: { id: repId },
+      select: { classId: true },
+    });
+    if (!rep || !rep.classId) {
+      throw new NotFoundException('You have not been assigned a class yet.');
+    }
+
+    const result = await this.prisma.session.deleteMany({
+      where: { id: { in: sessionIds }, classId: rep.classId },
+    });
+
+    return { deleted: result.count };
+  }
 }

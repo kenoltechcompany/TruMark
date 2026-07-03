@@ -124,14 +124,24 @@ export default function ClassroomsPage() {
               />
             </div>
           </div>
-          {/* Placeholder button for GPS capture — to be implemented in a later phase */}
+          {/* GPS Capture - uses browser geolocation API */}
           <button
             type="button"
-            disabled
-            title="GPS capture will be implemented in a future phase"
-            className="bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-3 py-1.5 rounded-md text-sm font-medium opacity-60 cursor-not-allowed"
+            onClick={() => {
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  setGpsLatitude(pos.coords.latitude.toString());
+                  setGpsLongitude(pos.coords.longitude.toString());
+                },
+                (err) => {
+                  alert('Could not get GPS position: ' + err.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000 },
+              );
+            }}
+            className="bg-[#0969DA] text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#0353A4] transition-colors"
           >
-            Capture Current GPS (Coming Soon)
+            Capture Current GPS
           </button>
           <div className="flex gap-2">
             <button

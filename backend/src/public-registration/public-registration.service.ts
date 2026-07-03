@@ -56,4 +56,35 @@ export class PublicRegistrationService {
       },
     });
   }
+
+  /**
+   * Returns session details with an isActive flag computed dynamically
+   * by checking if the current server time falls between startTime and endTime.
+   */
+  async getSession(sessionId: string) {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        class: { select: { name: true } },
+        classroom: { select: { name: true, gpsLatitude: true, gpsLongitude: true, radiusMeters: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('Session not found.');
+
+    const now = new Date();
+    return {
+      id: session.id,
+      name: session.name,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      className: session.class.name,
+      classroomName: session.classroom.name,
+      classroomBoundaries: {
+        gpsLatitude: session.classroom.gpsLatitude,
+        gpsLongitude: session.classroom.gpsLongitude,
+        radiusMeters: session.classroom.radiusMeters,
+      },
+      isActive: now >= session.startTime && now <= session.endTime,
+    };
+  }
 }
