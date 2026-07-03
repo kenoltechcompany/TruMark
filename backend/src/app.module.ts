@@ -9,6 +9,7 @@ import { ClassesModule } from './classes/classes.module';
 import { ClassroomsModule } from './classrooms/classrooms.module';
 import { CourseRepModule } from './course-rep/course-rep.module';
 import { PublicRegistrationModule } from './public-registration/public-registration.module';
+import { AzureFaceModule } from './azure-face/azure-face.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PublicRegistrationModule } from './public-registration/public-registrat
     ClassroomsModule,
     CourseRepModule,
     PublicRegistrationModule,
+    AzureFaceModule,
   ],
 })
 export class AppModule {}

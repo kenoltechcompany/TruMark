@@ -1,10 +1,12 @@
 import {
   Controller, Get, Post, Param, Body,
-  UseInterceptors, UploadedFiles,
+  UseInterceptors, UploadedFiles, UploadedFile,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { PublicRegistrationService } from './public-registration.service';
-import { IsString, MinLength } from 'class-validator';
+import { IsString, MinLength, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class RegisterStudentDto {
   @IsString()
@@ -14,6 +16,16 @@ export class RegisterStudentDto {
   @IsString()
   @MinLength(1)
   indexNumber: string;
+}
+
+export class CheckInDto {
+  @IsNumber()
+  @Type(() => Number)
+  latitude: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  longitude: number;
 }
 
 @Controller('public')
@@ -42,5 +54,18 @@ export class PublicRegistrationController {
   @Get('sessions/:id')
   getSession(@Param('id') id: string) {
     return this.service.getSession(id);
+  }
+
+  @Post('sessions/:id/check-in')
+  @UseInterceptors(FileInterceptor('image', { storage: memoryStorage() }))
+  async checkIn(
+    @Param('id') id: string,
+    @Body() dto: CheckInDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new Error('Image file is required.');
+    }
+    return this.service.checkIn(id, dto.latitude, dto.longitude, file.buffer);
   }
 }

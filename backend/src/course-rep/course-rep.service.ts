@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AzureFaceService } from '../azure-face/azure-face.service';
 
 @Injectable()
 export class CourseRepService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly azureFace: AzureFaceService,
+  ) {}
 
   /**
    * Returns the class managed by this CourseRep, including registration link status
@@ -22,7 +26,7 @@ export class CourseRepService {
       where: { id: rep.classId },
       include: {
         students: {
-          select: { id: true, fullName: true, indexNumber: true, imagePaths: true, createdAt: true },
+          select: { id: true, fullName: true, indexNumber: true, imagePaths: true, azurePersonId: true, createdAt: true },
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -176,5 +180,62 @@ export class CourseRepService {
     });
 
     return { deleted: result.count };
+  }
+
+  /**
+   * Syncs this CourseRep's class to Azure Face API.
+   * Returns the number of students that were synced.
+   */
+  async syncToAzure(repId: string) {
+    const rep = await this.prisma.courseRep.findUnique({
+      where: { id: repId },
+      select: { classId: true },
+    });
+    if (!rep || !rep.classId) {
+      throw new NotFoundException('You have not been assigned a class yet.');
+    }
+
+    const cls = await this.prisma.class.findUnique({
+      where: { id: rep.classId },
+      include: {
+        students: {
+          where: { azurePersonId: null },
+          select: { id: true, fullName: true, imagePaths: true },
+        },
+      },
+    });
+    if (!cls) throw new NotFoundException('Class not found.');
+
+    if (!cls.students.length) {
+      return { synced: 0, message: 'All students are already synced to Azure.' };
+    }
+
+    const updated = await this.azureFace.syncClassToAzure(cls.id, cls.name, cls.students);
+
+    // Save the azurePersonIds back to the database
+    for (const student of updated) {
+      await this.prisma.student.update({
+        where: { id: student.id },
+        data: { azurePersonId: student.azurePersonId },
+      });
+    }
+
+    return { synced: updated.length };
+  }
+
+  /**
+   * Returns attendance records for a given session, including student data.
+   */
+  async getAttendance(sessionId: string) {
+    const records = await this.prisma.attendanceRecord.findMany({
+      where: { sessionId },
+      include: {
+        student: {
+          select: { id: true, fullName: true, indexNumber: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return records;
   }
 }

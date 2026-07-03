@@ -1,0 +1,8 @@
+feat: Phase 4 - Azure Face integration, check-in endpoint, sync & attendance UI
+
+- Schema: azurePersonId on Student, AttendanceRecord model with unique(studentId, sessionId)
+- AzureFaceService: syncClassToAzure (create group, persons, upload faces, train) + identifyFace
+- Backend: POST /course-rep/my-class/sync, GET /course-rep/sessions/:sessionId/attendance
+- Backend: POST /public/sessions/:id/check-in (time validation, haversine geofence, face ID, dedup)
+- Frontend: Sync to Azure button on class dashboard with loading/disabled states
+- Frontend: View Attendance modal on session rows with DataTable

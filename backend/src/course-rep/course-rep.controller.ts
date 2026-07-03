@@ -97,4 +97,14 @@ export class CourseRepController {
   deleteSessions(@Req() req: any, @Body() dto: BulkDeleteSessionsDto) {
     return this.courseRepService.deleteSessions(req.user.id, dto.sessionIds);
   }
+
+  @Post('my-class/sync')
+  syncToAzure(@Req() req: any) {
+    return this.courseRepService.syncToAzure(req.user.id);
+  }
+
+  @Get('sessions/:sessionId/attendance')
+  getAttendance(@Param('sessionId') sessionId: string) {
+    return this.courseRepService.getAttendance(sessionId);
+  }
 }

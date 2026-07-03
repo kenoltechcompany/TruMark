@@ -17,6 +17,13 @@ interface Session {
   createdAt: string;
 }
 
+interface AttendanceRecord {
+  id: string;
+  student: { id: string; fullName: string; indexNumber: string };
+  confidence: number;
+  createdAt: string;
+}
+
 export default function SessionsPage() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -24,6 +31,7 @@ export default function SessionsPage() {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [classroomId, setClassroomId] = useState('');
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
 
   // Fetch all classrooms for the dropdown
   const { data: classrooms = [] } = useQuery<Classroom[]>({
@@ -35,6 +43,13 @@ export default function SessionsPage() {
   const { data: sessions = [], isLoading } = useQuery<Session[]>({
     queryKey: ['my-sessions'],
     queryFn: () => apiClient.get('/course-rep/sessions').then((r) => r.data),
+  });
+
+  // Fetch attendance records for selected session
+  const { data: attendance = [] } = useQuery<AttendanceRecord[]>({
+    queryKey: ['attendance', selectedSession],
+    queryFn: () => apiClient.get(`/course-rep/sessions/${selectedSession}/attendance`).then((r) => r.data),
+    enabled: !!selectedSession,
   });
 
   const createMutation = useMutation({
@@ -169,6 +184,12 @@ export default function SessionsPage() {
                 render: (item) => (
                   <div className="flex gap-2">
                     <button
+                      onClick={() => setSelectedSession(item.id)}
+                      className="text-[#0969DA] hover:underline text-sm"
+                    >
+                      View Attendance
+                    </button>
+                    <button
                       onClick={() => copyCheckinLink(item.id)}
                       className="text-[#0969DA] hover:underline text-sm"
                     >
@@ -177,7 +198,6 @@ export default function SessionsPage() {
                     <button
                       onClick={() => {
                         const url = `${window.location.origin}/api/public/sessions/${item.id}`;
-                        // Generate QR via a public QR API
                         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url)}`;
                         window.open(qrUrl, '_blank');
                       }}
@@ -196,6 +216,41 @@ export default function SessionsPage() {
               if (confirm(`Delete ${ids.length} session(s)?`)) bulkDeleteMutation.mutate(ids);
             }}
           />
+        </div>
+      )}
+
+      {/* ── Attendance Modal ── */}
+      {selectedSession && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white border border-[#D0D7DE] rounded-md shadow-sm p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-[#1F2328]">Attendance Records</h3>
+              <button
+                onClick={() => setSelectedSession(null)}
+                className="text-[#656D76] hover:text-[#1F2328] text-lg leading-none"
+              >
+                &times;
+              </button>
+            </div>
+            <DataTable<AttendanceRecord>
+              columns={[
+                { key: 'student', header: 'Name', render: (item) => item.student.fullName },
+                { key: 'indexNumber', header: 'Index No.', render: (item) => item.student.indexNumber },
+                {
+                  key: 'confidence',
+                  header: 'Confidence',
+                  render: (item) => `${(item.confidence * 100).toFixed(1)}%`,
+                },
+                {
+                  key: 'createdAt',
+                  header: 'Checked In',
+                  render: (item) => new Date(item.createdAt).toLocaleString(),
+                },
+              ]}
+              data={attendance}
+              keyExtractor={(a) => a.id}
+            />
+          </div>
         </div>
       )}
     </div>

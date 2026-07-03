@@ -8,6 +8,7 @@ interface Student {
   fullName: string;
   indexNumber: string;
   imagePaths: string[];
+  azurePersonId?: string | null;
   createdAt: string;
 }
 
@@ -41,6 +42,12 @@ export default function CourseRepDashboardPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-class'] }),
   });
 
+  // ── Sync to Azure ──
+  const syncMutation = useMutation({
+    mutationFn: () => apiClient.post('/course-rep/my-class/sync'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-class'] }),
+  });
+
   // ── Copy onboarding link ──
   const copyLink = () => {
     if (classData) {
@@ -57,6 +64,8 @@ export default function CourseRepDashboardPage() {
     return <p className="text-[#656D76]">No class assigned yet. Contact an admin.</p>;
   }
 
+  const unsyncedCount = classData.students.filter((s) => !s.azurePersonId).length;
+
   return (
     <div className="space-y-6">
       {/* ── Class Control Panel ── */}
@@ -66,6 +75,7 @@ export default function CourseRepDashboardPage() {
             <h2 className="text-lg font-semibold text-[#1F2328]">{classData.name}</h2>
             <p className="text-sm text-[#656D76] mt-0.5">
               {classData.students.length} student{classData.students.length !== 1 ? 's' : ''} enrolled
+              {unsyncedCount > 0 && ` (${unsyncedCount} unsynced to Azure)`}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -92,6 +102,14 @@ export default function CourseRepDashboardPage() {
             >
               Copy Onboarding Link
             </button>
+            {/* Sync to Azure button */}
+            <button
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending || unsyncedCount === 0}
+              className="bg-[#1F883D] text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#1A7F37] transition-colors disabled:opacity-50"
+            >
+              {syncMutation.isPending ? 'Syncing…' : 'Sync to Azure (Train Model)'}
+            </button>
           </div>
         </div>
       </div>
@@ -116,6 +134,15 @@ export default function CourseRepDashboardPage() {
               key: 'createdAt',
               header: 'Enrolled',
               render: (item) => new Date(item.createdAt).toLocaleDateString(),
+            },
+            {
+              key: 'azurePersonId',
+              header: 'Azure',
+              render: (item) => (
+                <span className={item.azurePersonId ? 'text-[#1F883D]' : 'text-[#656D76]'}>
+                  {item.azurePersonId ? 'Synced' : 'Pending'}
+                </span>
+              ),
             },
           ]}
           data={classData.students}
