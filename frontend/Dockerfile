@@ -1,5 +1,5 @@
 # ============================================================
-# TruMark Frontend — Multi-stage Docker build
+# TruMark Frontend - Multi-stage Docker build
 # Stage 1: Build static assets with Vite
 # Stage 2: Serve with Nginx alpine
 # ============================================================

@@ -1,5 +1,5 @@
 # ============================================================
-# TruMark — Docker Compose
+# TruMark - Docker Compose
 # Orchestrates four services:
 #   trumark-db           - PostgreSQL database
 #   trumark-face-service - InsightFace biometric microservice

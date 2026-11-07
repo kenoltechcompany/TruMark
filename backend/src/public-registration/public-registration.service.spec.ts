@@ -115,7 +115,7 @@ describe('PublicRegistrationService', () => {
           fullName: 'Alice',
           indexNumber: 'IND100',
           classId: 'cls-1',
-          imagePaths: ['/path/to/img1.jpg'],
+          imagePaths: [],
           faceEmbedding: [],
         },
         select: {

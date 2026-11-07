@@ -1,25 +1,42 @@
 import { Module } from '@nestjs/common';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
 import { PrismaThrottlerStorageService } from './prisma-throttler-storage.service';
+import { RedisThrottlerStorageService } from './redis-throttler-storage.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { PrismaService } from '../prisma/prisma.service';
 import { ThrottlerBehindProxyGuard } from './throttler-behind-proxy.guard';
 import { APP_GUARD } from '@nestjs/core';
 
+export const THROTTLER_STORAGE_TOKEN = 'THROTTLER_STORAGE_TOKEN';
+
 @Module({
   imports: [PrismaModule],
-  providers: [PrismaThrottlerStorageService],
-  exports: [PrismaThrottlerStorageService],
+  providers: [
+    PrismaThrottlerStorageService,
+    {
+      provide: THROTTLER_STORAGE_TOKEN,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService): ThrottlerStorage => {
+        const mode = (process.env.RATE_LIMIT_STORAGE || 'db').toLowerCase();
+        if (mode === 'redis') {
+          return new RedisThrottlerStorageService(prisma);
+        }
+        return new PrismaThrottlerStorageService(prisma);
+      },
+    },
+  ],
+  exports: [THROTTLER_STORAGE_TOKEN, PrismaThrottlerStorageService],
 })
-export class PrismaThrottlerStorageModule {}
+export class DynamicThrottlerStorageModule {}
 
 @Module({
   imports: [
     PrismaModule,
-    PrismaThrottlerStorageModule,
+    DynamicThrottlerStorageModule,
     ThrottlerModule.forRootAsync({
-      imports: [PrismaThrottlerStorageModule],
-      inject: [PrismaThrottlerStorageService],
-      useFactory: (storage: PrismaThrottlerStorageService) => ({
+      imports: [DynamicThrottlerStorageModule],
+      inject: [THROTTLER_STORAGE_TOKEN],
+      useFactory: (storage: ThrottlerStorage) => ({
         throttlers: [
           {
             name: 'default',
@@ -37,6 +54,6 @@ export class PrismaThrottlerStorageModule {}
       useClass: ThrottlerBehindProxyGuard,
     },
   ],
-  exports: [PrismaThrottlerStorageModule],
+  exports: [DynamicThrottlerStorageModule],
 })
 export class AppThrottlerModule {}

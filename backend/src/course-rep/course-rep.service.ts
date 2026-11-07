@@ -80,7 +80,7 @@ export class CourseRepService {
   async createStudent(
     repId: string,
     data: { fullName: string; indexNumber: string },
-    imagePaths: string[],
+    images: (Buffer | string)[],
   ) {
     const rep = await this.getRepStudent(repId);
 
@@ -95,12 +95,18 @@ export class CourseRepService {
     let faceEmbedding: number[] = [];
     if (this.faceRecognition.providerName === 'insightface') {
       try {
-        const buffers = imagePaths
-          .filter((p) => existsSync(p))
-          .map((p) => readFileSync(p));
+        const buffers: Buffer[] = [];
+        for (const item of images) {
+          if (Buffer.isBuffer(item)) {
+            buffers.push(item);
+          } else if (typeof item === 'string' && existsSync(item)) {
+            buffers.push(readFileSync(item));
+          }
+        }
         if (buffers.length > 0) {
           faceEmbedding = await this.faceRecognition.extractEmbedding(buffers);
         }
+        buffers.length = 0;
       } catch (err) {
         // Fallback: created without embedding, will sync later
       }
@@ -111,7 +117,7 @@ export class CourseRepService {
         fullName: data.fullName,
         indexNumber: data.indexNumber,
         classId: rep.classId,
-        imagePaths,
+        imagePaths: [],
         faceEmbedding,
       },
       select: {

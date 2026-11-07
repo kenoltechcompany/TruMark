@@ -80,6 +80,7 @@ export class PublicRegistrationController {
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @UseInterceptors(
     FilesInterceptor('images', 3, {
+      storage: memoryStorage(),
       fileFilter: imageFileFilter,
       limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB per photo
     }),
@@ -92,8 +93,8 @@ export class PublicRegistrationController {
     if (!files || files.length !== 3) {
       throw new BadRequestException('Exactly 3 reference images are required for registration.');
     }
-    const paths = files.map((f) => f.path);
-    return this.service.registerStudent(id, dto, paths);
+    const buffers = files.map((f) => f.buffer);
+    return this.service.registerStudent(id, dto, buffers);
   }
 
   @Get('sessions/:id')

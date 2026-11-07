@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { Throttle } from '@nestjs/throttler';
 import { CourseRepRoleGuard } from '../guards/course-rep-role.guard';
 import { CourseRepService } from './course-rep.service';
@@ -134,6 +135,7 @@ export class CourseRepController {
   @Post('students')
   @UseInterceptors(
     FilesInterceptor('images', 3, {
+      storage: memoryStorage(),
       fileFilter: imageFileFilter,
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
@@ -146,8 +148,8 @@ export class CourseRepController {
     if (!files || files.length !== 3) {
       throw new BadRequestException('Exactly 3 reference images are required.');
     }
-    const paths = files.map((f) => f.path);
-    return this.courseRepService.createStudent(req.user.id, dto, paths);
+    const buffers = files.map((f) => f.buffer);
+    return this.courseRepService.createStudent(req.user.id, dto, buffers);
   }
 
   @Post('my-class/students/import-csv')

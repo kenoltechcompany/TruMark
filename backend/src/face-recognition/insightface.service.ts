@@ -18,8 +18,14 @@ export class InsightFaceService implements IFaceRecognitionService {
   private readonly baseUrl: string;
 
   constructor() {
-    this.baseUrl = (process.env.FACE_SERVICE_URL || 'http://localhost:8000').replace(/\/$/, '');
-    this.logger.log(`InsightFaceService initialized targeting: ${this.baseUrl}`);
+    const mode = (process.env.INSIGHTFACE_MODE || 'local').toLowerCase();
+    const defaultUrl = mode === 'remote' ? 'https://face-engine.internal:8000' : 'http://localhost:8000';
+    this.baseUrl = (
+      process.env.INSIGHTFACE_SERVICE_URL ||
+      process.env.FACE_SERVICE_URL ||
+      defaultUrl
+    ).replace(/\/$/, '');
+    this.logger.log(`InsightFaceService initialized in [${mode.toUpperCase()}] mode targeting: ${this.baseUrl}`);
   }
 
   private async postFormData<T>(endpoint: string, formData: FormData): Promise<T> {

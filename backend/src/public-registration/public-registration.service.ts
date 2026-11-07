@@ -39,7 +39,7 @@ export class PublicRegistrationService {
   async registerStudent(
     classId: string,
     data: { fullName: string; indexNumber: string },
-    imagePaths: string[],
+    images: (Buffer | string)[],
   ) {
     const cls = await this.prisma.class.findUnique({ where: { id: classId } });
     if (!cls) throw new NotFoundException('Class not found.');
@@ -54,20 +54,24 @@ export class PublicRegistrationService {
       throw new BadRequestException('A student with this index number already exists in the system.');
     }
 
-    // Extract facial embedding if using InsightFace
+    // Extract facial embedding in-memory
     let faceEmbedding: number[] = [];
     if (this.faceRecognition.providerName === 'insightface') {
       try {
         const buffers: Buffer[] = [];
-        for (const p of imagePaths) {
-          if (existsSync(p)) {
-            buffers.push(readFileSync(p));
+        for (const item of images) {
+          if (Buffer.isBuffer(item)) {
+            buffers.push(item);
+          } else if (typeof item === 'string' && existsSync(item)) {
+            buffers.push(readFileSync(item));
           }
         }
         if (buffers.length > 0) {
           faceEmbedding = await this.faceRecognition.extractEmbedding(buffers);
           this.logger.log(`Extracted 512-d facial embedding for new student: ${data.fullName}`);
         }
+        // Explicitly clear references to free V8 heap immediately
+        buffers.length = 0;
       } catch (err: any) {
         this.logger.warn(`Could not extract facial embedding during registration: ${err.message}`);
       }
@@ -78,7 +82,7 @@ export class PublicRegistrationService {
         fullName: data.fullName,
         indexNumber: data.indexNumber,
         classId,
-        imagePaths,
+        imagePaths: [], // Zero disk persistence - purely vector-based
         faceEmbedding,
       },
       select: {

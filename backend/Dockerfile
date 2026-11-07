@@ -1,5 +1,5 @@
 # ============================================================
-# TruMark Backend — Multi-stage Docker build
+# TruMark Backend - Multi-stage Docker build
 # Stage 1: Build the NestJS application with Prisma
 # Stage 2: Lean production image with only runtime deps
 # ============================================================
