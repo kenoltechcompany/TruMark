@@ -8,20 +8,23 @@ on:
       - '.github/workflows/frontend-ci.yml'
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
+          bun-version: latest
 
-      - name: Install frontend dependencies
+      - name: Install dependencies with bun
+        run: bun install
+
+      - name: Run frontend tests
         working-directory: ./frontend
-        run: npm install
+        run: bun run test
 
       - name: Build with Vite
         working-directory: ./frontend
-        run: npm run build
+        run: bun run build

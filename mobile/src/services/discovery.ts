@@ -3,20 +3,34 @@
  *
  * Fetches a remote JSON file of school endpoints, falling back to a local
  * array if the remote fetch fails. The selected school's backendUrl is
- * persisted using AsyncStorage so the app remembers it across sessions.
+ * persisted so the app remembers it across sessions.
  */
 import localSchools from './schools.json';
 
-const REMOTE_SCHOOLS_URL = 'https://raw.githubusercontent.com/trumark/schools/main/schools.json';
+const REMOTE_SCHOOLS_URL =
+  'https://raw.githubusercontent.com/trumark/schools/main/schools.json';
 
-// Simple in-memory + AsyncStorage persistence
 const STORAGE_KEY_SCHOOL = 'trumark_selected_school';
 const STORAGE_KEY_URL = 'trumark_backend_url';
 
-// Minimal AsyncStorage mock — uses a simple approach.
-// In a real app this would use @react-native-async-storage/async-storage.
-// For now we use a module-level variable that persists within the app session.
-const store: Record<string, string> = {};
+// Safe dynamic AsyncStorage loader
+let storageEngine: {
+  getItem: (k: string) => Promise<string | null>;
+  setItem: (k: string, v: string) => Promise<void>;
+  removeItem: (k: string) => Promise<void>;
+} | null = null;
+
+try {
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  if (AsyncStorage && typeof AsyncStorage.getItem === 'function') {
+    storageEngine = AsyncStorage;
+  }
+} catch {
+  // AsyncStorage module not bundled, fall back to memory
+}
+
+// In-memory fallback
+const memoryStore: Record<string, string> = {};
 
 export interface School {
   id: string;
@@ -25,15 +39,37 @@ export interface School {
 }
 
 async function getItem(key: string): Promise<string | null> {
-  return store[key] ?? null;
+  if (storageEngine) {
+    try {
+      const val = await storageEngine.getItem(key);
+      if (val !== null) return val;
+    } catch {
+      // fallback to memory
+    }
+  }
+  return memoryStore[key] ?? null;
 }
 
 async function setItem(key: string, value: string): Promise<void> {
-  store[key] = value;
+  memoryStore[key] = value;
+  if (storageEngine) {
+    try {
+      await storageEngine.setItem(key, value);
+    } catch {
+      // fallback kept
+    }
+  }
 }
 
 async function removeItem(key: string): Promise<void> {
-  delete store[key];
+  delete memoryStore[key];
+  if (storageEngine) {
+    try {
+      await storageEngine.removeItem(key);
+    } catch {
+      // fallback kept
+    }
+  }
 }
 
 /**

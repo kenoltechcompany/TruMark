@@ -1,4 +1,3 @@
-
 # TruMark
 
 A federated, open-source attendance system using facial recognition, GPS geofencing, and self-sovereign school infrastructure. Students check in from a mobile app. Lecturers manage sessions from a web dashboard. Each school runs its own instance.
@@ -9,13 +8,15 @@ A federated, open-source attendance system using facial recognition, GPS geofenc
 
 TruMark has three main components:
 
-**Backend (NestJS + PostgreSQL + Prisma):** REST API handling authentication, session management, student onboarding, Azure Face identity verification, geofence validation via Haversine distance, attendance recording, and CSV export.
+**Backend (NestJS + PostgreSQL + Prisma):** REST API handling authentication, dual-role access control (Admin and Course Rep), session management, student onboarding, Azure Face identity verification, geofence validation via Haversine distance, attendance recording, and CSV export. Course Representatives are linked to enrolled Student profiles so their own attendance is tracked seamlessly.
 
-**Web Dashboard (React + Vite + Tailwind):** Two interfaces. An admin panel for managing course reps, classes, classrooms, and global student records. A course rep panel for running sessions, toggling self-registration links, syncing face data to Azure, and viewing attendance.
+**Web Dashboard (React + Vite + Tailwind):** Full CRUD interfaces styled following the Primer-inspired Shinaa design system:
+- Admin panel for managing course reps, academic classes, classrooms (with geolocation capture), and a global student roster audit.
+- Course rep panel for managing class sessions, viewing live attendance, toggleable self-registration links, generating session QR codes, syncing face data to Azure, and CSV export.
 
-**Mobile App (Expo + React Native):** A school discovery screen fetches the institution list. Students select their school, enter a session ID, and check in with a selfie and GPS position. The app shows a full-screen green confirmation or red error.
+**Mobile App (Expo + React Native):** A school discovery screen fetches the institution registry. Students select their school, scan the lecturer's session QR code (or enter the session ID), and verify attendance with a front-camera selfie and high-accuracy GPS coordinates.
 
-**Database (PostgreSQL):** Stores admins, course reps, classes, classrooms, students (with Azure person IDs), sessions, and attendance records.
+**Database (PostgreSQL):** Stores admins, course reps (with optional student links), classes, classrooms, students (with Azure person IDs), sessions, and attendance records.
 
 ---
 
@@ -49,15 +50,13 @@ docker compose up -d
 **Step 4:** Run the database migration.
 
 ```
-docker compose exec trumark-backend npx prisma migrate dev --name init
+docker compose exec trumark-backend bunx prisma migrate dev --name init
 ```
 
-**Step 5:** Access the dashboard at `http://localhost`. Create an admin account via the API:
+**Step 5:** Access the dashboard at `http://localhost`. Create an admin account via the CLI tool:
 
 ```
-curl -X POST http://localhost/api/admins \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your-password"}'
+docker compose exec trumark-backend bun run create:admin admin password123
 ```
 
 **Stopping:**
@@ -114,13 +113,9 @@ Example entry:
 
 3. Submit a Pull Request. Once merged, your school will appear in the mobile app's school picker for all users.
 
-### Self-Hosting Without the Registry
-
-If you prefer not to register in the central list, you can build your own mobile app pointing to your backend by editing `mobile/src/services/schools.json` before building.
-
 ---
 
-## Development Setup (Without Docker)
+## Development & Testing Setup
 
 **Prerequisites:** Node.js 22+, Bun, PostgreSQL running locally.
 
@@ -128,9 +123,11 @@ If you prefer not to register in the central list, you can build your own mobile
 
 ```bash
 cd backend
-cp .env.example .env  # edit DATABASE_URL for your local Postgres
+cp .env.example .env  # edit DATABASE_URL for local Postgres
 bun install
-bunx prisma migrate dev --name init
+bunx prisma generate
+bun run test         # runs Jest unit test suite
+bun run build        # builds production NestJS bundle
 bun run start:dev
 ```
 
@@ -139,16 +136,19 @@ bun run start:dev
 ```bash
 cd frontend
 bun install
+bun test             # runs frontend unit test suite
+bun run build        # builds production Vite assets
 bun run dev
 ```
 
-The frontend proxies `/api` requests to `http://localhost:4000` by default.
+The frontend proxies `/api` requests to `http://localhost:3000` by default.
 
 **Mobile:**
 
 ```bash
 cd mobile
 bun install
+bun run typecheck    # typechecks TypeScript sources
 bun start
 ```
 
