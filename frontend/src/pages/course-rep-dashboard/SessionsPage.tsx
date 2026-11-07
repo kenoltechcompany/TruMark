@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Lock, Unlock, ExternalLink, Copy, QrCode, Globe, Smartphone } from 'lucide-react';
+import { Lock, Unlock, ExternalLink, Copy, QrCode, Globe, Smartphone, Bot } from 'lucide-react';
 import apiClient from '../../api/client';
 import DataTable from '../../components/DataTable';
+import OnlineAttendanceModal from '../../components/OnlineAttendanceModal';
 
 interface Classroom {
   id: string;
@@ -45,6 +46,7 @@ export default function SessionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingSession, setEditingSession] = useState<Session | null>(null);
   const [qrModalSession, setQrModalSession] = useState<Session | null>(null);
+  const [onlineModalSession, setOnlineModalSession] = useState<Session | null>(null);
 
   const [name, setName] = useState('');
   const [startTime, setStartTime] = useState('');
@@ -404,6 +406,15 @@ export default function SessionsPage() {
                     </button>
                     <span className="text-[#D0D7DE]">|</span>
                     <button
+                      onClick={() => setOnlineModalSession(item)}
+                      className="text-[#0969DA] hover:underline text-xs font-semibold flex items-center gap-1"
+                      title="Launch Online Attendance Bot (Google Meet / Zoom)"
+                    >
+                      <Bot className="w-3.5 h-3.5" />
+                      <span>Online Bot</span>
+                    </button>
+                    <span className="text-[#D0D7DE]">|</span>
+                    <button
                       onClick={() => setQrModalSession(item)}
                       className="text-[#0969DA] hover:underline text-xs font-medium"
                     >
@@ -634,6 +645,17 @@ export default function SessionsPage() {
         <QrCodeModal
           session={qrModalSession}
           onClose={() => setQrModalSession(null)}
+        />
+      )}
+
+      {/* ── Online Meeting Attendance Bot Modal ── */}
+      {onlineModalSession && (
+        <OnlineAttendanceModal
+          session={{
+            id: onlineModalSession.id,
+            name: onlineModalSession.name,
+          }}
+          onClose={() => setOnlineModalSession(null)}
         />
       )}
 
