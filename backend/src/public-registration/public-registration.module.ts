@@ -2,11 +2,13 @@ import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
+import { FaceRecognitionModule } from '../face-recognition/face-recognition.module';
 import { PublicRegistrationController } from './public-registration.controller';
 import { PublicRegistrationService } from './public-registration.service';
 
 @Module({
   imports: [
+    FaceRecognitionModule,
     MulterModule.register({
       storage: diskStorage({
         destination: join(process.cwd(), 'uploads'),

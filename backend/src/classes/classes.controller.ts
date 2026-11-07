@@ -1,5 +1,15 @@
-import { Controller, Get, Post, Body, Param, Delete, Patch, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  Patch,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { AdminRoleGuard } from '../guards/admin-role.guard';
 import { ClassesService } from './classes.service';
 import { IsString, MinLength, IsOptional, IsArray } from 'class-validator';
 
@@ -28,6 +38,7 @@ export class ClassesController {
   constructor(private readonly classesService: ClassesService) {}
 
   @Post()
+  @UseGuards(AdminRoleGuard)
   create(@Body() dto: CreateClassDto) {
     return this.classesService.create(dto);
   }
@@ -43,16 +54,19 @@ export class ClassesController {
   }
 
   @Patch(':id')
+  @UseGuards(AdminRoleGuard)
   update(@Param('id') id: string, @Body() dto: UpdateClassDto) {
     return this.classesService.update(id, dto);
   }
 
   @Delete('bulk')
+  @UseGuards(AdminRoleGuard)
   removeMany(@Body() dto: BulkDeleteDto) {
     return this.classesService.removeMany(dto.ids);
   }
 
   @Delete(':id')
+  @UseGuards(AdminRoleGuard)
   remove(@Param('id') id: string) {
     return this.classesService.remove(id);
   }

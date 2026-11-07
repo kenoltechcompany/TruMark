@@ -30,7 +30,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       const admin = await this.prisma.admin.findUnique({ where: { id: payload.sub } });
       if (!admin) throw new UnauthorizedException('Admin not found');
     } else {
-      const rep = await this.prisma.courseRep.findUnique({ where: { id: payload.sub } });
+      const rep = await this.prisma.student.findFirst({
+        where: { id: payload.sub, isCourseRep: true },
+      });
       if (!rep) throw new UnauthorizedException('CourseRep not found');
     }
 

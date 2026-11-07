@@ -10,6 +10,8 @@ import { ClassroomsModule } from './classrooms/classrooms.module';
 import { CourseRepModule } from './course-rep/course-rep.module';
 import { PublicRegistrationModule } from './public-registration/public-registration.module';
 import { AzureFaceModule } from './azure-face/azure-face.module';
+import { FaceRecognitionModule } from './face-recognition/face-recognition.module';
+import { AppThrottlerModule } from './throttler/throttler.module';
 
 @Module({
   imports: [
@@ -18,6 +20,7 @@ import { AzureFaceModule } from './azure-face/azure-face.module';
       serveRoot: '/uploads',
     }),
     PrismaModule,
+    AppThrottlerModule,
     AuthModule,
     AdminsModule,
     CourseRepsModule,
@@ -26,6 +29,7 @@ import { AzureFaceModule } from './azure-face/azure-face.module';
     CourseRepModule,
     PublicRegistrationModule,
     AzureFaceModule,
+    FaceRecognitionModule,
   ],
 })
 export class AppModule {}
