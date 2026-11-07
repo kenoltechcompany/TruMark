@@ -8,6 +8,7 @@ interface AuthContextValue {
   role: string | null;
   /** The CourseRep's assigned classId, if role is COURSE_REP */
   classId: string | null;
+  username: string | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 }
@@ -28,23 +29,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
   const [role, setRole] = useState<string | null>(null);
   const [classId, setClassId] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
 
   const isAuthenticated = !!token;
 
-  // Sync role + classId from token whenever it changes
+  // Sync role + classId + username from token whenever it changes
   useEffect(() => {
     if (token) {
       const decoded = decodeToken(token);
       setRole(decoded?.role ?? null);
       setClassId(decoded?.classId ?? null);
+      setUsername(decoded?.username ?? null);
     } else {
       setRole(null);
       setClassId(null);
+      setUsername(null);
     }
   }, [token]);
 
-  const login = async (username: string, password: string) => {
-    const { data } = await apiClient.post('/auth/login', { username, password });
+  const login = async (usernameInput: string, password: string) => {
+    const { data } = await apiClient.post('/auth/login', { username: usernameInput, password });
     localStorage.setItem('token', data.accessToken);
     setToken(data.accessToken);
   };
@@ -54,15 +58,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
   };
 
-  // Redirect to login on initial render if no token
+  // Redirect to login on initial render if no token (except for public routes)
   useEffect(() => {
-    if (!token && window.location.pathname !== '/login' && !window.location.pathname.startsWith('/public/')) {
+    const path = window.location.pathname;
+    const isPublic =
+      path === '/' ||
+      path === '/login' ||
+      path.startsWith('/check-in') ||
+      path.startsWith('/public/');
+
+    if (!token && !isPublic) {
       window.location.href = '/login';
     }
   }, [token]);
 
   return (
-    <AuthContext.Provider value={{ token, isAuthenticated, role, classId, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        token,
+        isAuthenticated,
+        role,
+        classId,
+        username,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
