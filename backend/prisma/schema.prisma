@@ -91,6 +91,7 @@ model Session {
   class      Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
   classroom  Classroom          @relation(fields: [classroomId], references: [id], onDelete: Restrict)
   attendance AttendanceRecord[]
+  onlineJob  OnlineAttendanceJob?
 
   @@index([classId])
   @@index([classroomId])
@@ -98,7 +99,7 @@ model Session {
   @@map("sessions")
 }
 
-/// Records a successful check-in (biometric or manual) for a student during a session.
+/// Records a successful check-in (biometric, web, or bot) for a student during a session.
 model AttendanceRecord {
   id         String   @id @default(uuid()) @db.Uuid
   studentId  String   @map("student_id") @db.Uuid
@@ -133,7 +134,56 @@ model SystemSetting {
   enableLandingPage         Boolean  @default(true) @map("enable_landing_page")
   enableBiometricValidation Boolean  @default(true) @map("enable_biometric_validation")
   enableGeofencing          Boolean  @default(true) @map("enable_geofencing")
+
+  // Student Index Number Pattern Settings
+  idHasNumbers              Boolean  @default(true)  @map("id_has_numbers")
+  idHasAlphabets            Boolean  @default(false) @map("id_has_alphabets")
+  idMinLength               Int      @default(10)    @map("id_min_length")
+  idMaxLength               Int      @default(10)    @map("id_max_length")
+  idPrefix                  String?  @default("")    @map("id_prefix")
+  idSuffix                  String?  @default("")    @map("id_suffix")
+
+  // Meeting Bot Service Configuration
+  botServiceUrl             String?  @default("http://127.0.0.1:5001") @map("bot_service_url")
+  botApiKey                 String?  @default("trumark-bot-secret")     @map("bot_api_key")
+
   updatedAt                 DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
+}
+
+enum BotStatus {
+  IDLE
+  DISPATCHED
+  READY
+  WAITING_PERMISSION
+  JOINED
+  MONITORING
+  CONCLUDING
+  COMPLETED
+  FAILED
+}
+
+/// Online meeting attendance job dispatched to meeting-bot-service.
+model OnlineAttendanceJob {
+  id              String    @id @default(uuid()) @db.Uuid
+  sessionId       String    @unique @map("session_id") @db.Uuid
+  meetingUrl      String    @map("meeting_url")
+  platform        String    @default("GOOGLE_MEET") @map("platform")
+  isTimeBound     Boolean   @default(false) @map("is_time_bound")
+  minStayMinutes  Int       @default(0) @map("min_stay_minutes")
+  directWorkerUrl String?   @map("direct_worker_url")
+  status          BotStatus @default(DISPATCHED)
+  statusMessage   String?   @map("status_message")
+  lastHeartbeat   DateTime  @default(now()) @map("last_heartbeat")
+  cycleCount      Int       @default(0) @map("cycle_count")
+  attendeeMinutes Json      @default("{}") @map("attendee_minutes")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([status])
+  @@map("online_attendance_jobs")
 }

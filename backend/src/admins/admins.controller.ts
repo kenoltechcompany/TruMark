@@ -15,7 +15,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminRoleGuard } from '../guards/admin-role.guard';
 import { AdminsService } from './admins.service';
-import { IsArray, IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsNumber, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreateAdminDto {
   @IsString()
@@ -83,6 +83,38 @@ export class UpdateSystemSettingsDto {
   @IsOptional()
   @IsBoolean()
   enableGeofencing?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  idHasNumbers?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  idHasAlphabets?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  idMinLength?: number;
+
+  @IsOptional()
+  @IsNumber()
+  idMaxLength?: number;
+
+  @IsOptional()
+  @IsString()
+  idPrefix?: string;
+
+  @IsOptional()
+  @IsString()
+  idSuffix?: string;
+
+  @IsOptional()
+  @IsString()
+  botServiceUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  botApiKey?: string;
 }
 
 @Controller('admins')

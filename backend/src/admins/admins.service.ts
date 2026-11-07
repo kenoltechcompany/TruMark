@@ -288,6 +288,14 @@ export class AdminsService {
           enableLandingPage: true,
           enableBiometricValidation: true,
           enableGeofencing: true,
+          idHasNumbers: true,
+          idHasAlphabets: false,
+          idMinLength: 10,
+          idMaxLength: 10,
+          idPrefix: '',
+          idSuffix: '',
+          botServiceUrl: 'http://127.0.0.1:5001',
+          botApiKey: 'trumark-bot-secret',
         },
       });
     }
@@ -295,6 +303,14 @@ export class AdminsService {
       enableLandingPage: settings.enableLandingPage,
       enableBiometricValidation: settings.enableBiometricValidation,
       enableGeofencing: settings.enableGeofencing,
+      idHasNumbers: settings.idHasNumbers,
+      idHasAlphabets: settings.idHasAlphabets,
+      idMinLength: settings.idMinLength,
+      idMaxLength: settings.idMaxLength,
+      idPrefix: settings.idPrefix ?? '',
+      idSuffix: settings.idSuffix ?? '',
+      botServiceUrl: settings.botServiceUrl ?? 'http://127.0.0.1:5001',
+      botApiKey: settings.botApiKey ?? 'trumark-bot-secret',
       updatedAt: settings.updatedAt,
     };
   }
@@ -304,6 +320,14 @@ export class AdminsService {
     enableLandingPage?: boolean;
     enableBiometricValidation?: boolean;
     enableGeofencing?: boolean;
+    idHasNumbers?: boolean;
+    idHasAlphabets?: boolean;
+    idMinLength?: number;
+    idMaxLength?: number;
+    idPrefix?: string;
+    idSuffix?: string;
+    botServiceUrl?: string;
+    botApiKey?: string;
   }) {
     await this.getSettings();
 
@@ -319,6 +343,30 @@ export class AdminsService {
         ...(typeof data.enableGeofencing === 'boolean'
           ? { enableGeofencing: data.enableGeofencing }
           : {}),
+        ...(typeof data.idHasNumbers === 'boolean'
+          ? { idHasNumbers: data.idHasNumbers }
+          : {}),
+        ...(typeof data.idHasAlphabets === 'boolean'
+          ? { idHasAlphabets: data.idHasAlphabets }
+          : {}),
+        ...(typeof data.idMinLength === 'number'
+          ? { idMinLength: data.idMinLength }
+          : {}),
+        ...(typeof data.idMaxLength === 'number'
+          ? { idMaxLength: data.idMaxLength }
+          : {}),
+        ...(typeof data.idPrefix === 'string'
+          ? { idPrefix: data.idPrefix.trim() }
+          : {}),
+        ...(typeof data.idSuffix === 'string'
+          ? { idSuffix: data.idSuffix.trim() }
+          : {}),
+        ...(typeof data.botServiceUrl === 'string'
+          ? { botServiceUrl: data.botServiceUrl.trim() }
+          : {}),
+        ...(typeof data.botApiKey === 'string'
+          ? { botApiKey: data.botApiKey.trim() }
+          : {}),
       },
     });
 
@@ -326,6 +374,14 @@ export class AdminsService {
       enableLandingPage: updated.enableLandingPage,
       enableBiometricValidation: updated.enableBiometricValidation,
       enableGeofencing: updated.enableGeofencing,
+      idHasNumbers: updated.idHasNumbers,
+      idHasAlphabets: updated.idHasAlphabets,
+      idMinLength: updated.idMinLength,
+      idMaxLength: updated.idMaxLength,
+      idPrefix: updated.idPrefix ?? '',
+      idSuffix: updated.idSuffix ?? '',
+      botServiceUrl: updated.botServiceUrl ?? 'http://127.0.0.1:5001',
+      botApiKey: updated.botApiKey ?? 'trumark-bot-secret',
       updatedAt: updated.updatedAt,
     };
   }

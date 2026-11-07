@@ -12,6 +12,7 @@ import { PublicRegistrationModule } from './public-registration/public-registrat
 import { AzureFaceModule } from './azure-face/azure-face.module';
 import { FaceRecognitionModule } from './face-recognition/face-recognition.module';
 import { AppThrottlerModule } from './throttler/throttler.module';
+import { OnlineAttendanceModule } from './online-attendance/online-attendance.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AppThrottlerModule } from './throttler/throttler.module';
     PublicRegistrationModule,
     AzureFaceModule,
     FaceRecognitionModule,
+    OnlineAttendanceModule,
   ],
 })
 export class AppModule {}
