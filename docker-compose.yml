@@ -1,9 +1,10 @@
 # ============================================================
 # TruMark — Docker Compose
-# Orchestrates three services:
-#   trumark-db      - PostgreSQL database
-#   trumark-backend - NestJS API server
-#   trumark-frontend - Nginx web server (React SPA)
+# Orchestrates four services:
+#   trumark-db           - PostgreSQL database
+#   trumark-face-service - InsightFace biometric microservice
+#   trumark-backend      - NestJS API server
+#   trumark-frontend     - Nginx web server (React SPA)
 # ============================================================
 services:
 
@@ -25,6 +26,20 @@ services:
       timeout: 3s
       retries: 5
 
+  trumark-face-service:
+    build:
+      context: ./face-service
+      dockerfile: Dockerfile
+    container_name: trumark-face-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      FACE_MODEL_NAME: ${FACE_MODEL_NAME:-buffalo_sc}
+      FACE_SIMILARITY_THRESHOLD: ${FACE_SIMILARITY_THRESHOLD:-0.65}
+    volumes:
+      - insightface_models:/root/.insightface
+
   trumark-backend:
     build:
       context: ./backend
@@ -40,6 +55,8 @@ services:
       PORT: 3000
       DATABASE_URL: "postgresql://${POSTGRES_USER:-trumark}:${POSTGRES_PASSWORD:-trumark_secret}@trumark-db:5432/${POSTGRES_DB:-trumark}?schema=public"
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      FACE_PROVIDER: ${FACE_PROVIDER:-insightface}
+      FACE_SERVICE_URL: ${FACE_SERVICE_URL:-http://trumark-face-service:8000}
       AZURE_FACE_ENDPOINT: ${AZURE_FACE_ENDPOINT:-}
       AZURE_FACE_KEY: ${AZURE_FACE_KEY:-}
     volumes:
@@ -58,4 +75,5 @@ services:
 
 volumes:
   pgdata:
+  insightface_models:
   backend_uploads:
