@@ -1,7 +1,7 @@
 // ============================================================
 // TruMark - Attendance system database schema
 // Uses UUIDs for all primary keys. PostgreSQL is the datasource.
-// NOTE: connection URL is configured in prisma.config.ts (not here)
+// NOTE: connection URL is configured in prisma.config.ts
 // ============================================================
 
 generator client {
@@ -10,7 +10,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // url is configured in prisma.config.ts (Prisma 7+)
 }
 
 /// Admin users who manage the entire system.
@@ -23,20 +22,6 @@ model Admin {
   @@map("admins")
 }
 
-/// Course Representatives who manage individual classes.
-model CourseRep {
-  id           String   @id @default(uuid()) @db.Uuid
-  username     String   @unique
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  classId      String?  @map("class_id") @db.Uuid
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  class Class? @relation(fields: [classId], references: [id])
-
-  @@map("course_reps")
-}
-
 /// A class/section that students attend.
 model Class {
   id                     String   @id @default(uuid()) @db.Uuid
@@ -44,11 +29,52 @@ model Class {
   registrationLinkActive Boolean  @default(false) @map("registration_link_active")
   createdAt              DateTime @default(now()) @map("created_at")
 
-  courseReps  CourseRep[]
-  students    Student[]
-  sessions    Session[]
+  students Student[]
+  sessions Session[]
 
   @@map("classes")
+}
+
+/// A physical classroom location with GPS-based geofencing.
+model Classroom {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  gpsLatitude  Float    @map("gps_latitude")
+  gpsLongitude Float    @map("gps_longitude")
+  radiusMeters Int      @map("radius_meters")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sessions Session[]
+
+  @@index([name])
+  @@map("classrooms")
+}
+
+/// A student enrolled in a class.
+/// If isCourseRep = true, the student has course representative management rights.
+model Student {
+  id            String   @id @default(uuid()) @db.Uuid
+  fullName      String   @map("full_name")
+  indexNumber   String   @unique @map("index_number")
+  classId       String   @map("class_id") @db.Uuid
+  imagePaths    String[] @map("image_paths")
+  azurePersonId String?  @map("azure_person_id")
+  faceEmbedding Float[]  @default([]) @map("face_embedding")
+
+  // Course Representative capabilities
+  isCourseRep   Boolean  @default(false) @map("is_course_rep")
+  username      String?  @unique
+  email         String?  @unique
+  passwordHash  String?  @map("password_hash")
+
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  class      Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  attendance AttendanceRecord[]
+
+  @@index([classId])
+  @@index([isCourseRep])
+  @@map("students")
 }
 
 /// A session/meeting for attendance tracking.
@@ -59,46 +85,20 @@ model Session {
   endTime     DateTime @map("end_time")
   classId     String   @map("class_id") @db.Uuid
   classroomId String   @map("classroom_id") @db.Uuid
+  isLocked    Boolean  @default(false) @map("is_locked")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  class     Class     @relation(fields: [classId], references: [id])
-  classroom Classroom @relation(fields: [classroomId], references: [id])
+  class      Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  classroom  Classroom          @relation(fields: [classroomId], references: [id], onDelete: Restrict)
   attendance AttendanceRecord[]
 
+  @@index([classId])
+  @@index([classroomId])
+  @@index([startTime, endTime])
   @@map("sessions")
 }
 
-/// A physical classroom location with GPS-based geofencing.
-model Classroom {
-  id            String   @id @default(uuid()) @db.Uuid
-  name          String
-  gpsLatitude   Float    @map("gps_latitude")
-  gpsLongitude  Float    @map("gps_longitude")
-  radiusMeters  Int      @map("radius_meters")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  sessions    Session[]
-
-  @@map("classrooms")
-}
-
-/// A student enrolled in a class.
-model Student {
-  id            String   @id @default(uuid()) @db.Uuid
-  fullName      String   @map("full_name")
-  indexNumber   String   @unique @map("index_number")
-  classId        String   @map("class_id") @db.Uuid
-  imagePaths    String[] @map("image_paths")
-  azurePersonId String?  @map("azure_person_id")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  class     Class              @relation(fields: [classId], references: [id])
-  attendance AttendanceRecord[]
-
-  @@map("students")
-}
-
-/// Records a successful face-verified check-in for a student during a session.
+/// Records a successful check-in (biometric or manual) for a student during a session.
 model AttendanceRecord {
   id         String   @id @default(uuid()) @db.Uuid
   studentId  String   @map("student_id") @db.Uuid
@@ -106,9 +106,34 @@ model AttendanceRecord {
   confidence Float
   createdAt  DateTime @default(now()) @map("created_at")
 
-  student Student @relation(fields: [studentId], references: [id])
-  session Session @relation(fields: [sessionId], references: [id])
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, sessionId])
+  @@index([sessionId])
+  @@index([studentId])
   @@map("attendance_records")
+}
+
+/// Database-stored rate limit counters for distributed DDoS and abuse protection.
+model RateLimit {
+  key       String   @id
+  totalHits Int      @default(0) @map("total_hits")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([expiresAt])
+  @@map("rate_limits")
+}
+
+/// Global system configuration settings controlled by administrators.
+model SystemSetting {
+  id                        String   @id @default("default")
+  enableLandingPage         Boolean  @default(true) @map("enable_landing_page")
+  enableBiometricValidation Boolean  @default(true) @map("enable_biometric_validation")
+  enableGeofencing          Boolean  @default(true) @map("enable_geofencing")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
 }

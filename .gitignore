@@ -7,3 +7,18 @@ dist/
 .claude/skills/
 .commandcode/
 skills-lock.json
+
+# Python & Virtual Environments
+venv/
+.venv/
+**/venv/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Local development database & runtime artifacts
+local-pg/
+uploads/
+backend/uploads/
+scratch-*
+*.tmp
