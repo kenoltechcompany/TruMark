@@ -257,6 +257,14 @@ export class OnlineAttendanceService {
     const settings = await this.getSystemSettings();
     const targetUrl = job.directWorkerUrl || settings.botServiceUrl || 'http://127.0.0.1:5001';
 
+    await this.prisma.onlineAttendanceJob.update({
+      where: { id: job.id },
+      data: {
+        status: BotStatus.CONCLUDING,
+        statusMessage: 'Conclude requested by Course Representative.',
+      },
+    });
+
     try {
       await fetch(`${targetUrl}/jobs/${job.id}/conclude`, {
         method: 'POST',
@@ -269,12 +277,8 @@ export class OnlineAttendanceService {
       this.logger.warn(`Could not reach worker to conclude job at ${targetUrl}: ${err.message}`);
     }
 
-    return this.prisma.onlineAttendanceJob.update({
+    return this.prisma.onlineAttendanceJob.findUnique({
       where: { id: job.id },
-      data: {
-        status: BotStatus.CONCLUDING,
-        statusMessage: 'Conclude requested by Course Representative.',
-      },
     });
   }
 
