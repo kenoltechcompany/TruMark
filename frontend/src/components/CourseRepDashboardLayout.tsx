@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
-import { Menu, X, LogOut, LayoutDashboard, Calendar, Globe } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Calendar, Globe, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
@@ -12,6 +12,7 @@ export default function CourseRepDashboardLayout() {
   const { logout, username } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -19,78 +20,31 @@ export default function CourseRepDashboardLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F6F8FA] flex flex-col">
-      {/* ── Top Bar (Desktop & Mobile Header) ── */}
-      <header className="sticky top-0 z-40 bg-white border-b border-[#D0D7DE] px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-6">
-          <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[#0969DA] flex items-center justify-center text-white font-bold text-sm shadow-xs">
-              T
-            </div>
-            <div>
-              <h1 className="text-base font-semibold text-[#1F2328] leading-tight">TruMark</h1>
-              <p className="text-[10px] text-[#656D76] uppercase tracking-wide font-medium">
-                Course Representative
-              </p>
-            </div>
-          </Link>
+    <div className="min-h-screen bg-[#F6F8FA] flex flex-col md:flex-row">
+      {/* Mobile Top Header (hidden on md+) */}
+      <header className="md:hidden sticky top-0 z-40 bg-white border-b border-[#D0D7DE] px-4 py-3 flex items-center justify-between shadow-xs">
+        <Link to="/" className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-[#0969DA] flex items-center justify-center text-white font-bold text-sm shadow-xs">
+            T
+          </div>
+          <div>
+            <h1 className="text-base font-semibold text-[#1F2328] leading-tight">TruMark</h1>
+            <p className="text-[10px] text-[#656D76] uppercase tracking-wide font-medium">
+              Course Representative
+            </p>
+          </div>
+        </Link>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-[#0969DA] text-white shadow-xs'
-                        : 'text-[#1F2328] hover:bg-[#F6F8FA]'
-                    }`
-                  }
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{item.label}</span>
-                </NavLink>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Right side controls */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Link
-            to="/check-in"
-            target="_blank"
-            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#0969DA] bg-[#DDF4FF] border border-[#54AEFF]/30 rounded-md hover:bg-[#B6E3FF] transition-colors"
-          >
-            <Globe className="w-3 h-3" />
-            <span>Web Check-In</span>
-          </Link>
-
-          <button
-            onClick={handleLogout}
-            className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#CF222E] hover:bg-[#FFEBE9] rounded-md transition-colors"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Log out</span>
-          </button>
-
-          {/* Mobile hamburger button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-1.5 text-[#656D76] hover:text-[#1F2328] rounded-md border border-[#D0D7DE]"
-            aria-label="Toggle navigation menu"
-          >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </div>
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="p-1.5 text-[#656D76] hover:text-[#1F2328] rounded-md border border-[#D0D7DE] focus:outline-none"
+          aria-label="Toggle navigation menu"
+        >
+          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
       </header>
 
-      {/* ── Mobile Drawer Backdrop ── */}
+      {/* Mobile Drawer Backdrop */}
       {mobileMenuOpen && (
         <div
           className="md:hidden fixed inset-0 bg-black/40 z-40"
@@ -98,59 +52,122 @@ export default function CourseRepDashboardLayout() {
         />
       )}
 
-      {/* ── Mobile Slide-out Menu ── */}
-      {mobileMenuOpen && (
-        <div className="md:hidden fixed top-14 inset-x-0 bg-white border-b border-[#D0D7DE] z-50 p-4 space-y-2 shadow-lg animate-in slide-in-from-top duration-150">
-          <nav className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-[#0969DA] text-white'
-                        : 'text-[#1F2328] hover:bg-[#F6F8FA]'
-                    }`
-                  }
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                </NavLink>
-              );
-            })}
+      {/* Left Collapsible Sidebar (Desktop) & Slide-in Drawer (Mobile) */}
+      <aside
+        className={`fixed md:sticky top-0 inset-y-0 left-0 z-50 h-screen bg-white border-r border-[#D0D7DE] flex flex-col transition-all duration-200 ease-in-out ${
+          mobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'
+        } ${sidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
+      >
+        {/* Sidebar Brand + Hamburger/Collapse Toggle */}
+        <div
+          className={`p-3.5 border-b border-[#D0D7DE] flex items-center ${
+            sidebarCollapsed ? 'md:justify-center' : 'justify-between'
+          }`}
+        >
+          {!sidebarCollapsed && (
+            <Link to="/" className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-[#0969DA] flex items-center justify-center text-white font-bold text-sm shadow-xs shrink-0">
+                T
+              </div>
+              <div className="truncate">
+                <h1 className="text-base font-semibold text-[#1F2328] leading-tight truncate">
+                  TruMark
+                </h1>
+                <p className="text-[10px] text-[#656D76] uppercase tracking-wide font-medium truncate">
+                  Course Rep
+                </p>
+              </div>
+            </Link>
+          )}
+
+          {/* Desktop collapse-to-hamburger button */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="hidden md:inline-flex p-1.5 text-[#656D76] hover:text-[#1F2328] hover:bg-[#F6F8FA] rounded-md transition-colors"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? <Menu className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+          </button>
+
+          {/* Mobile close button */}
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="md:hidden p-1 text-[#656D76] hover:text-[#1F2328]"
+            aria-label="Close navigation menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="flex-1 p-2.5 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={() => setMobileMenuOpen(false)}
+                title={sidebarCollapsed ? item.label : undefined}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    sidebarCollapsed ? 'md:justify-center md:px-0' : ''
+                  } ${
+                    isActive
+                      ? 'bg-[#0969DA] text-white shadow-xs'
+                      : 'text-[#1F2328] hover:bg-[#F6F8FA]'
+                  }`
+                }
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+              </NavLink>
+            );
+          })}
+
+          <div className="pt-2 mt-2 border-t border-[#E1E4E8]">
             <Link
               to="/check-in"
+              target="_blank"
               onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-[#0969DA] hover:bg-[#DDF4FF]"
+              title={sidebarCollapsed ? 'Web Check-In' : undefined}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-[#0969DA] hover:bg-[#DDF4FF] transition-colors ${
+                sidebarCollapsed ? 'md:justify-center md:px-0' : ''
+              }`}
             >
-              <Globe className="w-4 h-4" />
-              <span>Open Web Check-In</span>
+              <Globe className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span className="truncate">Web Check-In</span>}
             </Link>
-          </nav>
-
-          <div className="pt-2 border-t border-[#D0D7DE] flex items-center justify-between">
-            {username && (
-              <span className="text-xs text-[#656D76]">@{username}</span>
-            )}
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 text-xs text-[#CF222E] font-medium"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Log out</span>
-            </button>
           </div>
-        </div>
-      )}
+        </nav>
 
-      {/* ── Content ── */}
-      <main className="flex-1 p-4 sm:p-6 max-w-5xl w-full mx-auto">
-        <Outlet />
+        {/* Bottom User & Logout */}
+        <div className="p-3 border-t border-[#D0D7DE] space-y-2">
+          {username && !sidebarCollapsed && (
+            <div className="px-2 py-1 text-xs text-[#656D76] truncate">
+              Signed in as <span className="font-semibold text-[#1F2328]">@{username}</span>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            title={sidebarCollapsed ? 'Log out' : undefined}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-[#CF222E] hover:bg-[#FFEBE9] rounded-md transition-colors ${
+              sidebarCollapsed ? 'md:justify-center md:px-0' : ''
+            }`}
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Log out</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 p-4 sm:p-6 min-w-0">
+        <div className="max-w-6xl mx-auto w-full">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
