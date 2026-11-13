@@ -226,9 +226,10 @@ export default function DataTable<T>({
         )}
       </div>
 
-      {/* ── Responsive Table ── */}
+      {/* ── Responsive Table & Mobile Cards ── */}
       <div className="border border-[#D0D7DE] rounded-lg overflow-hidden bg-white shadow-sm">
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm text-left border-collapse">
             <thead className="bg-[#F6F8FA] border-b border-[#D0D7DE] text-[#656D76] text-xs font-semibold uppercase tracking-wider select-none">
               <tr>
@@ -343,6 +344,97 @@ export default function DataTable<T>({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-[#D0D7DE]">
+          {selectable && paginatedData.length > 0 && !loading && (
+            <div className="px-4 py-2.5 bg-[#F6F8FA] flex items-center justify-between text-xs text-[#656D76]">
+              <label className="flex items-center gap-2 cursor-pointer font-medium">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleAllVisible}
+                  className="rounded border-[#D0D7DE] text-[#0969DA] focus:ring-[#0969DA] cursor-pointer"
+                />
+                <span>Select all on page</span>
+              </label>
+              <span>{paginatedData.length} items</span>
+            </div>
+          )}
+          {loading ? (
+            <div className="px-4 py-12 text-center text-[#656D76]">
+              <div className="flex flex-col items-center justify-center gap-2">
+                <div className="w-6 h-6 border-2 border-[#0969DA] border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm">Loading records...</span>
+              </div>
+            </div>
+          ) : paginatedData.length === 0 ? (
+            <div className="px-4 py-10 text-center text-[#656D76]">
+              <div className="flex flex-col items-center justify-center gap-1">
+                <p className="font-medium text-[#1F2328]">{emptyMessage}</p>
+                {search && (
+                  <p className="text-xs text-[#656D76]">
+                    Try adjusting your search or filters.
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            paginatedData.map((item) => {
+              const key = keyExtractor(item);
+              const isChecked = selected.has(key);
+              const regularCols = columns.filter((c) => c.key !== 'actions');
+              const actionCol = columns.find((c) => c.key === 'actions');
+
+              return (
+                <div
+                  key={key}
+                  className={`p-4 space-y-2.5 transition-colors ${
+                    isChecked ? 'bg-[#DDF4FF]/40' : 'bg-white'
+                  }`}
+                >
+                  {selectable && (
+                    <div className="flex items-center justify-between pb-1">
+                      <label className="flex items-center gap-2 text-xs font-medium text-[#656D76] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleOne(key)}
+                          className="rounded border-[#D0D7DE] text-[#0969DA] focus:ring-[#0969DA] cursor-pointer"
+                        />
+                        <span>Select</span>
+                      </label>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {regularCols.map((col) => (
+                      <div
+                        key={col.key}
+                        className="flex items-start justify-between gap-3 text-sm"
+                      >
+                        <span className="text-xs font-medium text-[#656D76] uppercase tracking-wide shrink-0 pt-0.5">
+                          {col.header}
+                        </span>
+                        <div className="text-right text-[#1F2328] break-words min-w-0">
+                          {col.render
+                            ? col.render(item)
+                            : String((item as Record<string, unknown>)[col.key] ?? '')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {actionCol && (
+                    <div className="pt-2.5 mt-2 border-t border-[#EAEEF2] flex items-center justify-end gap-2">
+                      {actionCol.render
+                        ? actionCol.render(item)
+                        : String((item as Record<string, unknown>)[actionCol.key] ?? '')}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
 
         {/* ── Pagination Footer ── */}
