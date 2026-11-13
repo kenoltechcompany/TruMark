@@ -11,6 +11,28 @@ interface Classroom {
   name: string;
 }
 
+interface OnlineJobSummary {
+  id: string;
+  status:
+    | 'IDLE'
+    | 'DISPATCHED'
+    | 'READY'
+    | 'WAITING_PERMISSION'
+    | 'JOINED'
+    | 'MONITORING'
+    | 'CONCLUDING'
+    | 'COMPLETED'
+    | 'FAILED';
+  statusMessage?: string | null;
+  isTimeBound: boolean;
+  minStayMinutes: number;
+  cycleCount: number;
+  attendeeMinutes?: Record<string, number> | null;
+  lastHeartbeat?: string | null;
+  meetingUrl: string;
+  updatedAt: string;
+}
+
 interface Session {
   id: string;
   name: string;
@@ -20,6 +42,7 @@ interface Session {
   classroom: { name: string } | null;
   isLocked?: boolean;
   createdAt: string;
+  onlineJob?: OnlineJobSummary | null;
 }
 
 interface AttendanceRecord {
@@ -62,10 +85,27 @@ export default function SessionsPage() {
     queryFn: () => apiClient.get('/classrooms').then((r) => r.data),
   });
 
-  // Fetch sessions
+  // Fetch sessions (auto-poll every 3s when any online bot is active)
   const { data: sessions = [], isLoading } = useQuery<Session[]>({
     queryKey: ['my-sessions'],
     queryFn: () => apiClient.get('/course-rep/sessions').then((r) => r.data),
+    refetchInterval: (query) => {
+      const list = query.state.data as Session[] | undefined;
+      const hasActiveBot = list?.some((s) =>
+        ['DISPATCHED', 'READY', 'WAITING_PERMISSION', 'JOINED', 'MONITORING', 'CONCLUDING'].includes(
+          s.onlineJob?.status || '',
+        ),
+      );
+      return hasActiveBot ? 3000 : false;
+    },
+  });
+
+  const concludeBotMutation = useMutation({
+    mutationFn: (sessionId: string) =>
+      apiClient.post(`/course-rep/sessions/${sessionId}/online-attendance/conclude`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-sessions'] });
+    },
   });
 
   // Fetch class students to know who is absent
@@ -402,6 +442,71 @@ export default function SessionsPage() {
                     >
                       {isActive ? '● Live Now' : isPast ? 'Completed' : 'Upcoming'}
                     </span>
+                  );
+                },
+              },
+              {
+                key: 'onlineJob',
+                header: 'Bot Status',
+                sortable: false,
+                render: (item) => {
+                  const job = item.onlineJob;
+                  if (!job) {
+                    return <span className="text-xs text-[#8C959F]">Not launched</span>;
+                  }
+
+                  const attendeeCount = job.attendeeMinutes
+                    ? Object.keys(job.attendeeMinutes).length
+                    : 0;
+                  const canConclude = ['WAITING_PERMISSION', 'JOINED', 'MONITORING'].includes(
+                    job.status,
+                  );
+
+                  const badgeMap: Record<string, string> = {
+                    DISPATCHED: 'bg-[#DDF4FF] text-[#0969DA] border-[#54AEFF]/40',
+                    READY: 'bg-[#DDF4FF] text-[#0969DA] border-[#54AEFF]/40',
+                    WAITING_PERMISSION: 'bg-[#FFF8C5] text-[#9A6700] border-[#D4A72C]/40 animate-pulse',
+                    JOINED: 'bg-[#E6F6EC] text-[#1F883D] border-[#2DA44E]/40',
+                    MONITORING: 'bg-[#E6F6EC] text-[#1F883D] border-[#2DA44E]/40 animate-pulse',
+                    CONCLUDING: 'bg-[#FFF8C5] text-[#9A6700] border-[#D4A72C]/40',
+                    COMPLETED: 'bg-[#E6F6EC] text-[#1F883D] border-[#2DA44E]/40',
+                    FAILED: 'bg-[#FFEBE9] text-[#CF222E] border-[#FF8182]/40',
+                    IDLE: 'bg-[#F6F8FA] text-[#656D76] border-[#D0D7DE]',
+                  };
+
+                  return (
+                    <div className="space-y-1 max-w-[240px]">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
+                            badgeMap[job.status] || badgeMap.IDLE
+                          }`}
+                        >
+                          {job.status.replace('_', ' ')}
+                        </span>
+                        <span className="text-[11px] text-[#656D76]">
+                          {job.isTimeBound ? `Time-Bound (${job.cycleCount}c)` : 'One-Off'}
+                          {attendeeCount > 0 ? ` · ${attendeeCount} detected` : ''}
+                        </span>
+                      </div>
+                      {job.statusMessage && (
+                        <p
+                          className="text-[11px] text-[#656D76] line-clamp-2 leading-snug"
+                          title={job.statusMessage}
+                        >
+                          {job.statusMessage}
+                        </p>
+                      )}
+                      {canConclude && (
+                        <button
+                          onClick={() => concludeBotMutation.mutate(item.id)}
+                          disabled={concludeBotMutation.isPending}
+                          className="text-[11px] font-semibold text-[#CF222E] hover:underline disabled:opacity-50"
+                        >
+                          Conclude Now
+                        </button>
+                      )}
+                    </div>
                   );
                 },
               },

@@ -102,7 +102,11 @@ export default function OnlineAttendanceModal({
       queryClient.invalidateQueries({
         queryKey: ['online-attendance-job', session.id],
       });
+      queryClient.invalidateQueries({
+        queryKey: ['my-sessions'],
+      });
       setFormError('');
+      onClose();
     },
     onError: (err: any) => {
       setFormError(

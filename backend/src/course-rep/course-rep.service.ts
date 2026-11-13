@@ -285,7 +285,23 @@ export class CourseRepService {
 
     return this.prisma.session.findMany({
       where: { classId: rep.classId },
-      include: { classroom: true },
+      include: {
+        classroom: true,
+        onlineJob: {
+          select: {
+            id: true,
+            status: true,
+            statusMessage: true,
+            isTimeBound: true,
+            minStayMinutes: true,
+            cycleCount: true,
+            attendeeMinutes: true,
+            lastHeartbeat: true,
+            meetingUrl: true,
+            updatedAt: true,
+          },
+        },
+      },
       orderBy: { startTime: 'desc' },
     });
   }
