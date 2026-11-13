@@ -110,16 +110,25 @@ export class GoogleMeetAdapter {
           throw new Error('Meeting requires Google sign-in and blocks anonymous participants.');
         }
 
+        const rawBodyText = await this.page.evaluate(() => document.body?.innerText || '').catch(() => '');
+        const normalizedBodyText = rawBodyText.replace(/[\u2018\u2019]/g, "'");
+        if (
+          normalizedBodyText.includes("You can't join this video call") ||
+          normalizedBodyText.includes('No one can join a meeting unless invited')
+        ) {
+          throw new Error("Google Meet blocked anonymous join: \"You can't join this video call\".");
+        }
+
         // Fill display name if guest input is shown
         const nameInput = this.page.locator('input[type="text"]').first();
         await retryActionWithWait(
           'Wait for name input',
           async () => {
-            await this.clickContinueWithoutDevicesIfPresent(2000);
-            await nameInput.waitFor({ state: 'visible', timeout: 15000 });
+            await this.clickContinueWithoutDevicesIfPresent(1500);
+            await nameInput.waitFor({ state: 'visible', timeout: 5000 });
           },
-          2,
-          3000,
+          1,
+          1000,
         ).catch(() => {});
 
         if (await nameInput.isVisible().catch(() => false)) {
@@ -208,26 +217,33 @@ export class GoogleMeetAdapter {
   private async waitForPreJoinReady(): Promise<void> {
     if (!this.page) return;
 
-    // Wait up to 15s for "Getting ready..." screen to clear or Continue/Name controls to appear
-    await Promise.race([
-      this.page
+    // Wait up to 15s for any pre-join element or error heading to render
+    await this.page
+      .locator(
+        'input[type="text"], button:has-text("Continue without microphone and camera"), button:has-text("Ask to join"), button:has-text("Join now"), h1',
+      )
+      .first()
+      .waitFor({ state: 'visible', timeout: 15000 })
+      .catch(() => {});
+
+    // If "Getting ready..." is currently visible, wait up to 12s for it to clear
+    const isGettingReady = await this.page
+      .evaluate(() => Boolean(document.body?.innerText?.includes('Getting ready')))
+      .catch(() => false);
+    if (isGettingReady) {
+      await this.page
         .waitForFunction(
           () => !document.body?.innerText?.includes('Getting ready'),
-          { timeout: 15000 },
+          { timeout: 12000 },
         )
-        .catch(() => {}),
-      this.page
-        .locator('button:has-text("Continue without microphone and camera"), input[type="text"]')
-        .first()
-        .waitFor({ state: 'visible', timeout: 15000 })
-        .catch(() => {}),
-    ]);
+        .catch(() => {});
+    }
 
-    await this.clickContinueWithoutDevicesIfPresent(10000);
+    await this.clickContinueWithoutDevicesIfPresent(3000);
     await this.page
       .locator('input[type="text"], button:has-text("Ask to join"), button:has-text("Join now")')
       .first()
-      .waitFor({ state: 'visible', timeout: 25000 })
+      .waitFor({ state: 'visible', timeout: 10000 })
       .catch(() => {});
 
     // Also dismiss any "Got it" dialog on pre-join if shown
