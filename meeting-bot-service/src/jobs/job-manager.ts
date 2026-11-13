@@ -59,7 +59,13 @@ export class JobManager {
           job.statusMessage = message || '';
           this.sendHeartbeat(job).catch(() => {});
 
-          if (status === 'JOINED' && !dto.isTimeBound) {
+          if (status === 'FAILED') {
+            if (job.intervalTimer) {
+              clearInterval(job.intervalTimer);
+              job.intervalTimer = null;
+            }
+            this.jobs.delete(job.id);
+          } else if (status === 'JOINED' && !dto.isTimeBound) {
             // Snapshot Mode: run single pass once joined
             console.log(`[JobManager] Starting Snapshot pass for job ${job.id}...`);
             this.runSnapshotPass(job).catch(() => {});
@@ -95,6 +101,7 @@ export class JobManager {
       job.status = 'FAILED';
       job.statusMessage = `Adapter startup failed: ${err.message}`;
       this.sendHeartbeat(job);
+      this.jobs.delete(job.id);
     });
 
     return { success: true, jobId: dto.jobId };

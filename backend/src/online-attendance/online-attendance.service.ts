@@ -89,12 +89,15 @@ export class OnlineAttendanceService {
       let workerAlive = false;
       const checkUrl = session.onlineJob.directWorkerUrl || botUrl;
       try {
-        const probe = await fetch(`${checkUrl}/jobs/${session.onlineJob.id}`, {
+        const probe = await fetch(`${checkUrl}/jobs/${session.onlineJob.id}/status`, {
           headers: { 'x-bot-api-key': settings.botApiKey || 'trumark-bot-secret' },
           signal: AbortSignal.timeout(3000),
         });
         if (probe.ok) {
-          workerAlive = true;
+          const workerJob = (await probe.json()) as { status?: string };
+          if (workerJob.status !== 'FAILED' && workerJob.status !== 'COMPLETED') {
+            workerAlive = true;
+          }
         }
       } catch {
         workerAlive = false;
