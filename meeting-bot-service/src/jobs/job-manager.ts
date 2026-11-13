@@ -14,6 +14,7 @@ export interface StartJobDto {
   callbackSecret?: string;
   idRules?: IdRules;
   existingAttendeeMinutes?: Record<string, number>; // for idempotency/auto-recovery
+  existingCycleCount?: number;
 }
 
 interface ActiveJob {
@@ -26,6 +27,8 @@ interface ActiveJob {
   attendeeMinutes: Record<string, number>;
   cycleCount: number;
   intervalTimer: NodeJS.Timeout | null;
+  heartbeatTimer: NodeJS.Timeout | null;
+  recovering: boolean;
   startedAt: Date;
 }
 
@@ -54,71 +57,120 @@ export class JobManager {
       }
 
       console.warn(`[JobManager] Cleaning up stale/terminal job ${dto.jobId} (status=${existing.status}, dead=${isDead}) before respawn.`);
-      if (existing.intervalTimer) {
-        clearInterval(existing.intervalTimer);
-        existing.intervalTimer = null;
-      }
+      this.clearTimers(existing);
       await existing.adapter.close().catch(() => {});
       this.jobs.delete(dto.jobId);
     }
 
     const parser = new IdParser(dto.idRules);
-    let job: ActiveJob;
-
-    const adapter = new GoogleMeetAdapter(dto.jobId, dto.meetingUrl, config.botDisplayName, {
-      onStatusChange: (status, message) => {
-        if (job) {
-          console.log(`[JobManager] Job ${job.id} status changed to ${status}: ${message || ''}`);
-          job.status = status as any;
-          job.statusMessage = message || '';
-          this.sendHeartbeat(job).catch(() => {});
-
-          if (status === 'FAILED') {
-            if (job.intervalTimer) {
-              clearInterval(job.intervalTimer);
-              job.intervalTimer = null;
-            }
-            this.jobs.delete(job.id);
-          } else if (status === 'JOINED' && !dto.isTimeBound) {
-            // Snapshot Mode: run single pass once joined
-            console.log(`[JobManager] Starting Snapshot pass for job ${job.id}...`);
-            this.runSnapshotPass(job).catch(() => {});
-          } else if (status === 'JOINED' && dto.isTimeBound) {
-            // Time-Bound Mode: start 5-minute sampling engine
-            console.log(`[JobManager] Starting Time-Bound engine for job ${job.id}...`);
-            this.startTimeBoundEngine(job).catch(() => {});
-          }
-        }
-      },
-    });
-
-    job = {
+    const job: ActiveJob = {
       id: dto.jobId,
       dto,
       parser,
-      adapter,
+      adapter: null as any,
       status: 'READY',
       statusMessage: 'Worker initialized and preparing to join call.',
       attendeeMinutes: { ...(dto.existingAttendeeMinutes || {}) },
-      cycleCount: 0,
+      cycleCount: dto.existingCycleCount || 0,
       intervalTimer: null,
+      heartbeatTimer: null,
+      recovering: false,
       startedAt: new Date(),
     };
 
+    job.adapter = this.createAdapter(job);
     this.jobs.set(dto.jobId, job);
+
+    // Recurring 10s heartbeat & in-worker browser crash recovery
+    job.heartbeatTimer = setInterval(() => {
+      this.tickHeartbeat(job).catch(() => {});
+    }, 10000);
 
     // Initial Handshake: Report direct address back to TruMark
     await this.sendHeartbeat(job);
 
     // Launch meeting adapter
-    adapter.start().catch((err) => {
+    job.adapter.start().catch((err) => {
       job.status = 'FAILED';
       job.statusMessage = `Adapter startup failed: ${err.message}`;
+      this.clearTimers(job);
       this.sendHeartbeat(job);
       this.jobs.delete(job.id);
     });
 
     return { success: true, jobId: dto.jobId };
+  }
+
+  private static clearTimers(job: ActiveJob): void {
+    if (job.intervalTimer) {
+      clearInterval(job.intervalTimer);
+      job.intervalTimer = null;
+    }
+    if (job.heartbeatTimer) {
+      clearInterval(job.heartbeatTimer);
+      job.heartbeatTimer = null;
+    }
+  }
+
+  private static createAdapter(job: ActiveJob): GoogleMeetAdapter {
+    return new GoogleMeetAdapter(job.id, job.dto.meetingUrl, config.botDisplayName, {
+      onStatusChange: (status, message) => {
+        if (job.recovering && status === 'FAILED') {
+          return;
+        }
+        console.log(`[JobManager] Job ${job.id} status changed to ${status}: ${message || ''}`);
+        job.status = status as any;
+        job.statusMessage = message || '';
+        this.sendHeartbeat(job).catch(() => {});
+
+        if (status === 'FAILED') {
+          this.clearTimers(job);
+          this.jobs.delete(job.id);
+        } else if (status === 'JOINED' && !job.dto.isTimeBound) {
+          job.recovering = false;
+          console.log(`[JobManager] Starting Snapshot pass for job ${job.id}...`);
+          this.runSnapshotPass(job).catch(() => {});
+        } else if (status === 'JOINED' && job.dto.isTimeBound) {
+          job.recovering = false;
+          console.log(`[JobManager] Starting Time-Bound engine for job ${job.id}...`);
+          this.startTimeBoundEngine(job).catch(() => {});
+        }
+      },
+    });
+  }
+
+  private static async tickHeartbeat(job: ActiveJob): Promise<void> {
+    if (
+      job.status === 'COMPLETED' ||
+      job.status === 'FAILED' ||
+      job.status === 'CONCLUDING'
+    ) {
+      return;
+    }
+
+    if (
+      ['WAITING_PERMISSION', 'JOINED', 'MONITORING'].includes(job.status) &&
+      !job.adapter.isAlive() &&
+      !job.recovering
+    ) {
+      console.warn(`[JobManager] Browser session interrupted for job ${job.id}. Auto-respawning...`);
+      job.recovering = true;
+      job.statusMessage = 'Browser session interrupted; auto-respawning bot...';
+      await this.sendHeartbeat(job);
+      await job.adapter.close().catch(() => {});
+      job.adapter = this.createAdapter(job);
+      job.adapter.start().catch((err) => {
+        job.recovering = false;
+        job.status = 'FAILED';
+        job.statusMessage = `Auto-respawn failed: ${err.message}`;
+        this.clearTimers(job);
+        this.sendHeartbeat(job);
+        this.jobs.delete(job.id);
+      });
+      return;
+    }
+
+    await this.sendHeartbeat(job);
   }
 
   public static async updateConfig(jobId: string, updates: { minStayMinutes?: number }): Promise<boolean> {
@@ -141,10 +193,7 @@ export class JobManager {
     job.statusMessage = 'Course Representative initiated manual conclusion. Finalizing attendance...';
     await this.sendHeartbeat(job);
 
-    if (job.intervalTimer) {
-      clearInterval(job.intervalTimer);
-      job.intervalTimer = null;
-    }
+    this.clearTimers(job);
 
     // Finalize and submit results
     await this.finalizeAttendance(job);
@@ -169,23 +218,28 @@ export class JobManager {
       job.attendeeMinutes[indexNum] = (job.attendeeMinutes[indexNum] || 0) + 1;
     }
 
+    this.clearTimers(job);
     await this.finalizeAttendance(job);
     await job.adapter.leaveMeeting();
     this.jobs.delete(job.id);
   }
 
   private static async startTimeBoundEngine(job: ActiveJob): Promise<void> {
+    if (job.intervalTimer) {
+      clearInterval(job.intervalTimer);
+      job.intervalTimer = null;
+    }
     job.status = 'MONITORING';
-    job.statusMessage = 'Active in meeting. 5-minute sampling accumulator running.';
+    job.statusMessage = 'Active in meeting. Periodic sampling accumulator running.';
     await this.sendHeartbeat(job);
 
-    // Run cycle 1 immediately
+    // Run cycle immediately
     await this.executeSamplingCycle(job);
 
-    // Setup 5-minute recurring timer
+    // Setup configurable recurring timer (default 5 minutes)
     job.intervalTimer = setInterval(async () => {
       await this.executeSamplingCycle(job);
-    }, 5 * 60 * 1000);
+    }, config.samplingIntervalMs);
   }
 
   private static async executeSamplingCycle(job: ActiveJob): Promise<void> {

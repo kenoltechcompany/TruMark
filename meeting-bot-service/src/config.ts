@@ -25,7 +25,8 @@ export const config = {
     process.env.DIRECT_WORKER_URL ||
     `http://${getLocalIp()}:${process.env.PORT || '5001'}`,
   maxConcurrentJobs: parseInt(process.env.MAX_CONCURRENT_JOBS || '5', 10),
+  samplingIntervalMs: parseInt(process.env.BOT_SAMPLING_INTERVAL_MS || String(5 * 60 * 1000), 10),
   headless: process.env.BOT_HEADLESS ? process.env.BOT_HEADLESS === 'true' : false,
-  browserChannel: process.env.BOT_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : 'chrome'),
+  browserChannel: process.env.BOT_BROWSER_CHANNEL || 'chrome',
   profileDir: process.env.BOT_PROFILE_DIR || path.join(os.homedir(), '.trumark-bot-profile'),
 };

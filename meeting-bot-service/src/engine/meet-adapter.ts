@@ -3,7 +3,7 @@
  * Stripped of recording/upload logic; focuses on stealth joining, lobby admission,
  * post-join modal dismissal, and reliable participant roster scraping.
  */
-import { Page } from 'playwright';
+import { Page } from 'patchright';
 import { BrowserPool, BrowserSession } from './browser-pool';
 
 const GOOGLE_REQUEST_DENIED = 'Someone in the call denied your request to join';
@@ -115,6 +115,7 @@ export class GoogleMeetAdapter {
         await retryActionWithWait(
           'Wait for name input',
           async () => {
+            await this.clickContinueWithoutDevicesIfPresent(2000);
             await nameInput.waitFor({ state: 'visible', timeout: 15000 });
           },
           2,
@@ -122,14 +123,18 @@ export class GoogleMeetAdapter {
         ).catch(() => {});
 
         if (await nameInput.isVisible().catch(() => false)) {
+          await this.clickContinueWithoutDevicesIfPresent(1500);
           console.log(`[GoogleMeetAdapter:${this.jobId}] Entering display name: "${this.botDisplayName}"`);
-          await nameInput.fill(this.botDisplayName);
+          await nameInput.click({ timeout: 5000 });
+          await nameInput.fill('');
+          await nameInput.pressSequentially(this.botDisplayName, { delay: 35 });
+          await this.page.waitForTimeout(400);
         }
 
         // Mute mic/camera if toggles are present (fallback when devices are available)
         await this.muteMediaIfVisible();
 
-        // Click Join / Ask to join using screenappai's DOM + Locator strategy
+        // Click Join / Ask to join using trusted Playwright pointer click first
         await retryActionWithWait(
           'Click Join / Ask to join',
           () => this.clickJoinButton(),
@@ -137,7 +142,7 @@ export class GoogleMeetAdapter {
           3000,
         );
 
-        await this.clickContinueWithoutDevicesIfPresent(2500);
+        await this.clickContinueWithoutDevicesIfPresent(2000);
 
         this.callbacks.onStatusChange(
           'WAITING_PERMISSION',
@@ -180,7 +185,7 @@ export class GoogleMeetAdapter {
     }
   }
 
-  private async clickContinueWithoutDevicesIfPresent(timeout = 5000): Promise<boolean> {
+  private async clickContinueWithoutDevicesIfPresent(timeout = 12000): Promise<boolean> {
     if (!this.page || this.page.isClosed()) return false;
     const btn = this.page
       .locator('button')
@@ -189,44 +194,81 @@ export class GoogleMeetAdapter {
       })
       .first();
 
-    if (await btn.isVisible({ timeout }).catch(() => false)) {
+    try {
+      await btn.waitFor({ state: 'visible', timeout });
       console.log(`[GoogleMeetAdapter:${this.jobId}] Clicking "Continue without microphone and camera"...`);
-      await btn.click({ timeout: 3000 }).catch(() => {});
+      await btn.click({ timeout: 5000 });
+      await this.page.waitForTimeout(800);
       return true;
+    } catch {
+      return false;
     }
-    return false;
   }
 
   private async waitForPreJoinReady(): Promise<void> {
     if (!this.page) return;
-    await this.clickContinueWithoutDevicesIfPresent(5000);
+
+    // Wait up to 15s for "Getting ready..." screen to clear or Continue/Name controls to appear
+    await Promise.race([
+      this.page
+        .waitForFunction(
+          () => !document.body?.innerText?.includes('Getting ready'),
+          { timeout: 15000 },
+        )
+        .catch(() => {}),
+      this.page
+        .locator('button:has-text("Continue without microphone and camera"), input[type="text"]')
+        .first()
+        .waitFor({ state: 'visible', timeout: 15000 })
+        .catch(() => {}),
+    ]);
+
+    await this.clickContinueWithoutDevicesIfPresent(10000);
     await this.page
       .locator('input[type="text"], button:has-text("Ask to join"), button:has-text("Join now")')
       .first()
       .waitFor({ state: 'visible', timeout: 25000 })
       .catch(() => {});
+
     // Also dismiss any "Got it" dialog on pre-join if shown
     const gotIt = this.page.locator('button:has-text("Got it"), button:has-text("Dismiss")').first();
-    if (await gotIt.isVisible({ timeout: 1500 }).catch(() => false)) {
-      await gotIt.click().catch(() => {});
+    if (await gotIt.isVisible().catch(() => false)) {
+      await gotIt.click({ timeout: 3000 }).catch(() => {});
     }
   }
 
   private async muteMediaIfVisible(): Promise<void> {
     if (!this.page) return;
     const micBtn = this.page.locator('button[aria-label*="Turn off microphone" i]').first();
-    if (await micBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await micBtn.click().catch(() => {});
+    if (await micBtn.isVisible().catch(() => false)) {
+      await micBtn.click({ timeout: 2000 }).catch(() => {});
     }
     const camBtn = this.page.locator('button[aria-label*="Turn off camera" i]').first();
-    if (await camBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await camBtn.click().catch(() => {});
+    if (await camBtn.isVisible().catch(() => false)) {
+      await camBtn.click({ timeout: 2000 }).catch(() => {});
     }
   }
 
   private async clickJoinButton(): Promise<void> {
     if (!this.page || this.page.isClosed()) {
       throw new Error('Page closed before clicking join.');
+    }
+
+    // Use trusted Playwright pointer click first on exact join button labels
+    const exactJoinBtn = this.page
+      .locator('button')
+      .filter({ hasText: /^Ask to join$|^Join now$|^Join anyway$/i })
+      .first();
+    try {
+      await exactJoinBtn.waitFor({ state: 'visible', timeout: 5000 });
+      if (await exactJoinBtn.isEnabled().catch(() => false)) {
+        const label = (await exactJoinBtn.innerText().catch(() => 'Join')).trim();
+        await exactJoinBtn.click({ timeout: 5000 });
+        console.log(`[GoogleMeetAdapter:${this.jobId}] Clicked "${label}" via trusted locator click.`);
+        return;
+      }
+    } catch {
+      // Fall through to localized / regex patterns
     }
 
     const possibleTexts = [
@@ -238,6 +280,20 @@ export class GoogleMeetAdapter {
     ];
 
     for (const text of possibleTexts) {
+      const btn = this.page.locator('button', { hasText: new RegExp(text, 'i') }).first();
+      if (
+        (await btn.isVisible().catch(() => false)) &&
+        (await btn.isEnabled().catch(() => false))
+      ) {
+        try {
+          await btn.click({ timeout: 5000 });
+          console.log(`[GoogleMeetAdapter:${this.jobId}] Clicked "${text}" via trusted locator click.`);
+          return;
+        } catch {
+          // Fallback to DOM click if locator pointer click was intercepted
+        }
+      }
+
       const clickedByDom = await this.page
         .evaluate((buttonText) => {
           const buttons = Array.from(document.querySelectorAll('button'));
@@ -257,17 +313,7 @@ export class GoogleMeetAdapter {
         .catch(() => false);
 
       if (clickedByDom) {
-        console.log(`[GoogleMeetAdapter:${this.jobId}] Clicked "${text}" button.`);
-        return;
-      }
-
-      const btn = this.page.locator('button', { hasText: new RegExp(text, 'i') }).first();
-      if (
-        (await btn.isVisible({ timeout: 1500 }).catch(() => false)) &&
-        (await btn.isEnabled({ timeout: 1500 }).catch(() => false))
-      ) {
-        await btn.click({ timeout: 5000 });
-        console.log(`[GoogleMeetAdapter:${this.jobId}] Clicked "${text}" via locator.`);
+        console.log(`[GoogleMeetAdapter:${this.jobId}] Clicked "${text}" button via DOM fallback.`);
         return;
       }
     }
@@ -447,41 +493,59 @@ export class GoogleMeetAdapter {
         .catch(() => false);
 
       if (!listVisible) {
-        const clickedPeople = await this.page
-          .evaluate(() => {
-            const candidates: Array<Element | null> = [
-              document.querySelector('button[aria-label^="People"]'),
-              document.querySelector('button[aria-label*="People" i]'),
-              document.querySelector('button[aria-label*="Show everyone" i]'),
-              document.querySelector('button[data-panel-id="1"]'),
-            ];
+        let clickedPeople = false;
+        const primaryPeopleBtn = this.page
+          .locator(
+            'button[aria-label^="People"], button[aria-label*="People" i], button[aria-label*="Show everyone" i], button[data-panel-id="1"]',
+          )
+          .first();
 
-            // Strategy: aria-labelledby pointing to "People"
-            const allBtns = Array.from(document.querySelectorAll('button'));
-            for (const btn of allBtns) {
-              const labelledBy = btn.getAttribute('aria-labelledby');
-              if (labelledBy) {
-                const lbl = document.getElementById(labelledBy);
-                if (lbl && ['People', 'Personen'].includes(lbl.textContent?.trim() || '')) {
+        if (await primaryPeopleBtn.isVisible().catch(() => false)) {
+          try {
+            await primaryPeopleBtn.click({ timeout: 3000 });
+            clickedPeople = true;
+          } catch {
+            clickedPeople = false;
+          }
+        }
+
+        if (!clickedPeople) {
+          clickedPeople = await this.page
+            .evaluate(() => {
+              const candidates: Array<Element | null> = [
+                document.querySelector('button[aria-label^="People"]'),
+                document.querySelector('button[aria-label*="People" i]'),
+                document.querySelector('button[aria-label*="Show everyone" i]'),
+                document.querySelector('button[data-panel-id="1"]'),
+              ];
+
+              // Strategy: aria-labelledby pointing to "People"
+              const allBtns = Array.from(document.querySelectorAll('button'));
+              for (const btn of allBtns) {
+                const labelledBy = btn.getAttribute('aria-labelledby');
+                if (labelledBy) {
+                  const lbl = document.getElementById(labelledBy);
+                  if (lbl && ['People', 'Personen'].includes(lbl.textContent?.trim() || '')) {
+                    candidates.push(btn);
+                  }
+                }
+                // Strategy: material icon child with text === 'people'
+                const icon = btn.querySelector('i, span');
+                if (icon && icon.textContent?.trim() === 'people') {
                   candidates.push(btn);
                 }
               }
-              // Strategy: material icon child with text === 'people'
-              const icon = btn.querySelector('i, span');
-              if (icon && icon.textContent?.trim() === 'people') {
-                candidates.push(btn);
-              }
-            }
 
-            for (const btn of candidates) {
-              if (btn && (btn as HTMLElement).offsetParent !== null) {
-                (btn as HTMLElement).click();
-                return true;
+              for (const btn of candidates) {
+                if (btn && (btn as HTMLElement).offsetParent !== null) {
+                  (btn as HTMLElement).click();
+                  return true;
+                }
               }
-            }
-            return false;
-          })
-          .catch(() => false);
+              return false;
+            })
+            .catch(() => false);
+        }
 
         if (clickedPeople) {
           await this.page.waitForTimeout(1200);

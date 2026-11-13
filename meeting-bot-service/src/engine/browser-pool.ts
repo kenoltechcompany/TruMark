@@ -1,16 +1,9 @@
 /**
  * Adapted from screenappai/meeting-bot (MIT License) - src/lib/chromium.ts
- * Stripped of recording/ffmpeg flags and tuned for Google Meet anti-detection & idempotency.
+ * Powered by patchright to eliminate CDP Runtime.enable fingerprinting.
  */
-import { Browser, BrowserContext, Page } from 'playwright';
-import { chromium } from 'playwright-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { Browser, BrowserContext, Page, chromium } from 'patchright';
 import { config } from '../config';
-
-const stealthPlugin = StealthPlugin();
-stealthPlugin.enabledEvasions.delete('iframe.contentWindow');
-stealthPlugin.enabledEvasions.delete('media.codecs');
-chromium.use(stealthPlugin);
 
 export interface BrowserSession {
   browser: Browser;
@@ -56,16 +49,15 @@ async function launchBrowserWithTimeout(
 
 export class BrowserPool {
   /**
-   * Launches an isolated, stealth-hardened browser context for Google Meet.
-   * Each job gets its own incognito-like context so concurrent jobs never collide
-   * and crashed/restarted jobs remain 100% idempotent.
+   * Launches an isolated, patchright stealth browser context for Google Meet.
+   * Each job gets its own context so concurrent jobs never collide and crashed
+   * or restarted jobs remain 100% idempotent.
    */
   public static async createGoogleMeetSession(jobId: string): Promise<BrowserSession> {
     const windowHeight = DEFAULT_VIEWPORT.height + 80;
 
-    // Google Meet is sensitive to browser fingerprinting before admission.
-    // Keep launch close to normal Chrome/Edge without fake media devices.
     const googleBrowserArgs: string[] = [
+      '--disable-blink-features=AutomationControlled',
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-first-run-ui',
@@ -81,23 +73,38 @@ export class BrowserPool {
     const ignoreDefaultArgs = ['--mute-audio', '--enable-automation'];
 
     console.log(
-      `[BrowserPool:${jobId}] Launching stealth browser (channel: ${config.browserChannel || 'chromium'}, headless: ${config.headless})`,
+      `[BrowserPool:${jobId}] Launching patchright browser (channel: ${config.browserChannel || 'chromium'}, headless: ${config.headless})`,
     );
 
-    const browser = await launchBrowserWithTimeout(
-      () =>
-        chromium.launch({
-          headless: config.headless,
-          ...(config.browserChannel ? { channel: config.browserChannel } : {}),
-          handleSIGINT: false,
-          handleSIGTERM: false,
-          handleSIGHUP: false,
-          args: googleBrowserArgs,
-          ignoreDefaultArgs,
-        }),
-      60000,
-      jobId,
-    );
+    const launchWithChannel = (channel?: string) =>
+      launchBrowserWithTimeout(
+        () =>
+          chromium.launch({
+            headless: config.headless,
+            ...(channel ? { channel } : {}),
+            handleSIGINT: false,
+            handleSIGTERM: false,
+            handleSIGHUP: false,
+            args: googleBrowserArgs,
+            ignoreDefaultArgs,
+          }),
+        60000,
+        jobId,
+      );
+
+    let browser: Browser;
+    try {
+      browser = await launchWithChannel(config.browserChannel || undefined);
+    } catch (err: any) {
+      if (config.browserChannel) {
+        console.warn(
+          `[BrowserPool:${jobId}] Channel "${config.browserChannel}" failed (${err?.message || err}); falling back to bundled chromium...`,
+        );
+        browser = await launchWithChannel(undefined);
+      } else {
+        throw err;
+      }
+    }
 
     const context = await browser.newContext({
       viewport: DEFAULT_VIEWPORT,
