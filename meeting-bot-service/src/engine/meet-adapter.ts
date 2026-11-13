@@ -191,7 +191,7 @@ export class GoogleMeetAdapter {
 
     if (await btn.isVisible({ timeout }).catch(() => false)) {
       console.log(`[GoogleMeetAdapter:${this.jobId}] Clicking "Continue without microphone and camera"...`);
-      await btn.click().catch(() => {});
+      await btn.click({ timeout: 3000 }).catch(() => {});
       return true;
     }
     return false;
