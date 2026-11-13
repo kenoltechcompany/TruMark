@@ -267,22 +267,7 @@ export class CourseRepService {
       throw new BadRequestException('startTime must be before endTime.');
     }
 
-    // Classroom double-booking prevention check
-    const overlapping = await this.prisma.session.findFirst({
-      where: {
-        classroomId: data.classroomId,
-        startTime: { lt: end },
-        endTime: { gt: start },
-      },
-      include: { classroom: true, class: true },
-    });
-
-    if (overlapping) {
-      throw new ConflictException(
-        `Classroom "${overlapping.classroom.name}" is already reserved for "${overlapping.name}" (${overlapping.class.name}) during this timeframe.`,
-      );
-    }
-
+    // Multiple sessions are allowed to share the same classroom location concurrently
     return this.prisma.session.create({
       data: {
         name: data.name,
@@ -329,23 +314,6 @@ export class CourseRepService {
 
     if (start >= end) {
       throw new BadRequestException('startTime must be before endTime.');
-    }
-
-    // Check double-booking excluding this session
-    const overlapping = await this.prisma.session.findFirst({
-      where: {
-        id: { not: sessionId },
-        classroomId: targetClassroomId,
-        startTime: { lt: end },
-        endTime: { gt: start },
-      },
-      include: { classroom: true },
-    });
-
-    if (overlapping) {
-      throw new ConflictException(
-        `Classroom "${overlapping.classroom.name}" is already reserved for another session during this timeframe.`,
-      );
     }
 
     const updateData: any = {};

@@ -306,7 +306,23 @@ export default function SessionsPage() {
               {
                 key: 'classroom',
                 header: 'Classroom',
-                render: (item) => item.classroom?.name || '-',
+                render: (item) => {
+                  const isVirtual = Boolean(
+                    item.classroom?.name?.toLowerCase().includes('online') ||
+                      item.classroom?.name?.toLowerCase().includes('virtual'),
+                  );
+                  return (
+                    <div className="flex flex-col gap-1 items-start">
+                      <span className="text-sm text-[#1F2328]">{item.classroom?.name || '-'}</span>
+                      {isVirtual && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#0969DA] bg-[#DDF4FF] px-1.5 py-0.5 rounded border border-[#54AEFF]/30">
+                          <Globe className="w-2.5 h-2.5" />
+                          Virtual / Online
+                        </span>
+                      )}
+                    </div>
+                  );
+                },
               },
               {
                 key: 'startTime',
@@ -407,19 +423,29 @@ export default function SessionsPage() {
                     <span className="text-[#D0D7DE]">|</span>
                     <button
                       onClick={() => setOnlineModalSession(item)}
-                      className="text-[#0969DA] hover:underline text-xs font-semibold flex items-center gap-1"
+                      className="text-[#0969DA] hover:text-[#0353A4] text-xs font-semibold flex items-center gap-1 bg-[#DDF4FF] px-2 py-0.5 rounded border border-[#54AEFF]/30 hover:bg-[#B6E3FF] transition-colors"
                       title="Launch Online Attendance Bot (Google Meet / Zoom)"
                     >
                       <Bot className="w-3.5 h-3.5" />
                       <span>Online Bot</span>
                     </button>
                     <span className="text-[#D0D7DE]">|</span>
-                    <button
-                      onClick={() => setQrModalSession(item)}
-                      className="text-[#0969DA] hover:underline text-xs font-medium"
-                    >
-                      QR Code
-                    </button>
+                    {item.classroom?.name?.toLowerCase().includes('online') ||
+                    item.classroom?.name?.toLowerCase().includes('virtual') ? (
+                      <span
+                        className="text-[#8C959F] text-xs font-normal cursor-not-allowed"
+                        title="Physical biometric/QR check-in is disabled for Virtual sessions"
+                      >
+                        QR Disabled
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setQrModalSession(item)}
+                        className="text-[#0969DA] hover:underline text-xs font-medium"
+                      >
+                        QR Code
+                      </button>
+                    )}
                     <span className="text-[#D0D7DE]">|</span>
                     <button
                       onClick={() => copyCheckInLink(item.id)}

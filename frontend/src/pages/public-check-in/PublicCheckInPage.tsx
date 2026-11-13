@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Globe } from 'lucide-react';
 import apiClient from '../../api/client';
 
 interface SessionData {
@@ -16,6 +17,7 @@ interface SessionData {
   };
   isLocked?: boolean;
   isActive: boolean;
+  isVirtual?: boolean;
   enableBiometricValidation?: boolean;
   enableGeofencing?: boolean;
 }
@@ -410,9 +412,34 @@ export default function PublicCheckInPage() {
                   <span>⚡ Remote Verification: Classroom GPS geofencing is bypassed. Verify your attendance with selfie biometrics from any location.</span>
                 </div>
               )}
+            </div>
 
-              {/* Status Indicators Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            {session.isVirtual ? (
+              <div className="bg-white border border-[#D0D7DE] rounded-xl p-8 shadow-sm text-center space-y-4">
+                <div className="w-14 h-14 bg-[#DDF4FF] text-[#0969DA] rounded-full flex items-center justify-center mx-auto">
+                  <Globe className="w-7 h-7" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-[#1F2328]">Online / Virtual Meeting Session</h3>
+                  <p className="text-xs text-[#656D76] max-w-md mx-auto mt-1.5 leading-relaxed">
+                    Physical checking in with face scanning and GPS geofencing is disabled for this session.
+                    Your attendance is captured automatically by the TruMark Attendance Bot during the scheduled online video call.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <Link
+                    to="/"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#F6F8FA] border border-[#D0D7DE] rounded-md text-xs font-semibold text-[#1F2328] hover:bg-[#EAEFF2] transition-colors"
+                  >
+                    Return to Homepage
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-sm">
+                  {/* Status Indicators Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 {/* GPS Status */}
                 <div
                   className={`border rounded-lg p-3 ${
@@ -601,8 +628,10 @@ export default function PublicCheckInPage() {
                 )}
               </div>
             </div>
-          </div>
+          </>
         )}
+      </div>
+    )}
 
         {/* Check-In Success Flash Card */}
         {checkInResult && (

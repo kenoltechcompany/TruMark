@@ -9,6 +9,7 @@ interface Classroom {
   gpsLatitude: number;
   gpsLongitude: number;
   radiusMeters: number;
+  isVirtual?: boolean;
   createdAt: string;
 }
 
@@ -187,33 +188,68 @@ export default function ClassroomsPage() {
             {
               key: 'name',
               header: 'Name',
-              render: (item) => (
-                <span className="font-medium text-[#1F2328]">{item.name}</span>
-              ),
+              render: (item) => {
+                const isVirt = Boolean(
+                  item.isVirtual ||
+                    item.name.toLowerCase().includes('online') ||
+                    item.name.toLowerCase().includes('virtual'),
+                );
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-[#1F2328]">{item.name}</span>
+                    {isVirt && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#0969DA] bg-[#DDF4FF] px-1.5 py-0.5 rounded border border-[#54AEFF]/30">
+                        Default Virtual
+                      </span>
+                    )}
+                  </div>
+                );
+              },
             },
             {
               key: 'coordinates',
               header: 'Coordinates',
-              render: (item) => (
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs">
-                    {item.gpsLatitude.toFixed(6)}, {item.gpsLongitude.toFixed(6)}
-                  </span>
-                  <a
-                    href={`https://www.google.com/maps?q=${item.gpsLatitude},${item.gpsLongitude}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#0969DA] hover:underline text-xs"
-                  >
-                    View Map
-                  </a>
-                </div>
-              ),
+              render: (item) => {
+                const isVirt = Boolean(
+                  item.isVirtual ||
+                    item.name.toLowerCase().includes('online') ||
+                    item.name.toLowerCase().includes('virtual'),
+                );
+                if (isVirt) {
+                  return (
+                    <span className="text-xs text-[#656D76] italic">
+                      Virtual Classroom (No GPS geofence)
+                    </span>
+                  );
+                }
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs">
+                      {item.gpsLatitude.toFixed(6)}, {item.gpsLongitude.toFixed(6)}
+                    </span>
+                    <a
+                      href={`https://www.google.com/maps?q=${item.gpsLatitude},${item.gpsLongitude}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#0969DA] hover:underline text-xs"
+                    >
+                      View Map
+                    </a>
+                  </div>
+                );
+              },
             },
             {
               key: 'radiusMeters',
               header: 'Geofence Radius',
-              render: (item) => `${item.radiusMeters}m (tolerance: +5m)`,
+              render: (item) => {
+                const isVirt = Boolean(
+                  item.isVirtual ||
+                    item.name.toLowerCase().includes('online') ||
+                    item.name.toLowerCase().includes('virtual'),
+                );
+                return isVirt ? 'Online Only' : `${item.radiusMeters}m (tolerance: +5m)`;
+              },
             },
             {
               key: 'createdAt',
@@ -224,27 +260,43 @@ export default function ClassroomsPage() {
               key: 'actions',
               header: 'Actions',
               sortable: false,
-              render: (item) => (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setEditingClassroom(item)}
-                    className="text-[#0969DA] hover:underline text-sm font-medium"
-                  >
-                    Edit
-                  </button>
-                  <span className="text-[#D0D7DE]">|</span>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Delete classroom "${item.name}"?`)) {
-                        deleteMutation.mutate(item.id);
-                      }
-                    }}
-                    className="text-[#D73A49] hover:underline text-sm font-medium"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ),
+              render: (item) => {
+                const isVirt = Boolean(
+                  item.isVirtual ||
+                    item.name.toLowerCase().includes('online') ||
+                    item.name.toLowerCase().includes('virtual'),
+                );
+                return (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setEditingClassroom(item)}
+                      className="text-[#0969DA] hover:underline text-sm font-medium"
+                    >
+                      Edit
+                    </button>
+                    <span className="text-[#D0D7DE]">|</span>
+                    {isVirt ? (
+                      <span
+                        className="text-[#8C959F] text-xs cursor-not-allowed"
+                        title="System default virtual classroom cannot be deleted"
+                      >
+                        Protected
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete classroom "${item.name}"?`)) {
+                            deleteMutation.mutate(item.id);
+                          }
+                        }}
+                        className="text-[#D73A49] hover:underline text-sm font-medium"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                );
+              },
             },
           ]}
           data={classrooms}

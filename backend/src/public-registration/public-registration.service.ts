@@ -163,10 +163,8 @@ export class PublicRegistrationService {
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
       include: {
-        class: { select: { name: true } },
-        classroom: {
-          select: { name: true, gpsLatitude: true, gpsLongitude: true, radiusMeters: true },
-        },
+        class: true,
+        classroom: true,
       },
     });
     if (!session) throw new NotFoundException('Session not found.');
@@ -174,6 +172,12 @@ export class PublicRegistrationService {
     const settings = await this.getPublicSettings();
     const now = new Date();
     const isWithinTime = now >= session.startTime && now <= session.endTime;
+    const isVirtual = Boolean(
+      session.classroom.isVirtual ||
+        session.classroom.name.toLowerCase().includes('online') ||
+        session.classroom.name.toLowerCase().includes('virtual'),
+    );
+
     return {
       id: session.id,
       name: session.name,
@@ -188,6 +192,7 @@ export class PublicRegistrationService {
       },
       isLocked: session.isLocked,
       isActive: !session.isLocked && isWithinTime,
+      isVirtual,
       enableBiometricValidation: settings.enableBiometricValidation,
       enableGeofencing: settings.enableGeofencing,
     };
@@ -254,6 +259,18 @@ export class PublicRegistrationService {
 
     if (session.isLocked) {
       throw new BadRequestException('Attendance for this session has been locked.');
+    }
+
+    // Physical check-in is disabled for Online / Virtual sessions
+    const isVirtual = Boolean(
+      session.classroom.isVirtual ||
+        session.classroom.name.toLowerCase().includes('online') ||
+        session.classroom.name.toLowerCase().includes('virtual'),
+    );
+    if (isVirtual) {
+      throw new BadRequestException(
+        'Physical biometric check-in is disabled for Online/Virtual sessions. Attendance is conducted online via the meeting bot.',
+      );
     }
 
     // 1. Time validation

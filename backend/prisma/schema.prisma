@@ -35,13 +35,14 @@ model Class {
   @@map("classes")
 }
 
-/// A physical classroom location with GPS-based geofencing.
+/// A physical or virtual classroom location with optional GPS-based geofencing.
 model Classroom {
   id           String   @id @default(uuid()) @db.Uuid
   name         String
   gpsLatitude  Float    @map("gps_latitude")
   gpsLongitude Float    @map("gps_longitude")
   radiusMeters Int      @map("radius_meters")
+  isVirtual    Boolean  @default(false) @map("is_virtual")
   createdAt    DateTime @default(now()) @map("created_at")
 
   sessions Session[]

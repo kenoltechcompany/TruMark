@@ -163,6 +163,21 @@ describe('PublicRegistrationService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('throws BadRequestException if session is an Online/Virtual classroom session', async () => {
+      mockPrisma.session.findUnique.mockResolvedValue({
+        ...validSession,
+        classroom: {
+          ...validSession.classroom,
+          name: 'Online / Virtual Classroom',
+          isVirtual: true,
+        },
+      });
+
+      await expect(
+        service.checkIn('sess-1', 5.6037, -0.187, Buffer.from('photo')),
+      ).rejects.toThrow(/Physical biometric check-in is disabled for Online\/Virtual sessions/);
+    });
+
     it('throws BadRequestException if student is outside classroom geofence boundary', async () => {
       mockPrisma.session.findUnique.mockResolvedValue(validSession);
 
