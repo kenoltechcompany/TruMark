@@ -5,6 +5,8 @@ import {
   BadRequestException,
   ForbiddenException,
   ServiceUnavailableException,
+  OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -13,13 +15,30 @@ import {
   BotHeartbeatDto,
   BotConcludeDto,
 } from './online-attendance.dto';
-import { BotStatus } from '@prisma/client';
+import { BotStatus, OnlineAttendanceJob, SystemSetting } from '@prisma/client';
 
 @Injectable()
-export class OnlineAttendanceService {
+export class OnlineAttendanceService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OnlineAttendanceService.name);
+  private watchdogTimer: NodeJS.Timeout | null = null;
+  private watchdogRunning = false;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  onModuleInit() {
+    this.watchdogTimer = setInterval(() => {
+      this.runWatchdog().catch((err) => {
+        this.logger.warn(`Watchdog tick failed: ${err?.message || err}`);
+      });
+    }, 10000);
+  }
+
+  onModuleDestroy() {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+  }
 
   private async getRepStudent(repId: string) {
     const student = await this.prisma.student.findUnique({
@@ -133,45 +152,8 @@ export class OnlineAttendanceService {
       },
     });
 
-    // Callback URL for worker heartbeats and results
-    const backendPort = process.env.PORT || 4000;
-    const callbackUrl =
-      process.env.INTERNAL_CALLBACK_URL || `http://127.0.0.1:${backendPort}/api/online-attendance/bot`;
-
     try {
-      const response = await fetch(`${botUrl}/jobs/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-bot-api-key': settings.botApiKey || 'trumark-bot-secret',
-        },
-        body: JSON.stringify({
-          jobId: job.id,
-          sessionId: session.id,
-          meetingUrl: dto.meetingUrl,
-          platform: dto.platform || 'GOOGLE_MEET',
-          isTimeBound: dto.isTimeBound,
-          minStayMinutes: dto.minStayMinutes,
-          callbackUrl,
-          callbackSecret: settings.botApiKey || 'trumark-bot-secret',
-          idRules: {
-            idHasNumbers: settings.idHasNumbers,
-            idHasAlphabets: settings.idHasAlphabets,
-            idMinLength: settings.idMinLength,
-            idMaxLength: settings.idMaxLength,
-            idPrefix: settings.idPrefix,
-            idSuffix: settings.idSuffix,
-          },
-          existingAttendeeMinutes: (job.attendeeMinutes as Record<string, number>) || {},
-        }),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new BadRequestException(`Meeting bot service rejected job: ${text}`);
-      }
-
-      const resJson = await response.json().catch(() => ({}));
+      const resJson = await this.dispatchToWorker(job, settings);
       if (resJson.directWorkerUrl) {
         // Save direct worker address if provided in response
         await this.prisma.onlineAttendanceJob.update({
@@ -193,6 +175,134 @@ export class OnlineAttendanceService {
       throw new ServiceUnavailableException(
         `Meeting bot service unreachable at ${botUrl}. Please verify bot service is running.`,
       );
+    }
+  }
+
+  private async dispatchToWorker(
+    job: OnlineAttendanceJob,
+    settings: SystemSetting,
+  ): Promise<{ directWorkerUrl?: string }> {
+    const botUrl = settings.botServiceUrl || 'http://127.0.0.1:5001';
+    const backendPort = process.env.PORT || 4000;
+    const callbackUrl =
+      process.env.INTERNAL_CALLBACK_URL || `http://127.0.0.1:${backendPort}/api/online-attendance/bot`;
+
+    const response = await fetch(`${botUrl}/jobs/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-bot-api-key': settings.botApiKey || 'trumark-bot-secret',
+      },
+      signal: AbortSignal.timeout(5000),
+      body: JSON.stringify({
+        jobId: job.id,
+        sessionId: job.sessionId,
+        meetingUrl: job.meetingUrl,
+        platform: job.platform || 'GOOGLE_MEET',
+        isTimeBound: job.isTimeBound,
+        minStayMinutes: job.minStayMinutes,
+        callbackUrl,
+        callbackSecret: settings.botApiKey || 'trumark-bot-secret',
+        idRules: {
+          idHasNumbers: settings.idHasNumbers,
+          idHasAlphabets: settings.idHasAlphabets,
+          idMinLength: settings.idMinLength,
+          idMaxLength: settings.idMaxLength,
+          idPrefix: settings.idPrefix,
+          idSuffix: settings.idSuffix,
+        },
+        existingAttendeeMinutes: (job.attendeeMinutes as Record<string, number>) || {},
+        existingCycleCount: job.cycleCount || 0,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new BadRequestException(`Meeting bot service rejected job: ${text}`);
+    }
+
+    return response.json().catch(() => ({}));
+  }
+
+  private async runWatchdog(): Promise<void> {
+    if (this.watchdogRunning) return;
+    this.watchdogRunning = true;
+
+    try {
+      const activeJobs = await this.prisma.onlineAttendanceJob.findMany({
+        where: {
+          status: {
+            in: [
+              BotStatus.DISPATCHED,
+              BotStatus.READY,
+              BotStatus.WAITING_PERMISSION,
+              BotStatus.JOINED,
+              BotStatus.MONITORING,
+            ],
+          },
+        },
+      });
+
+      if (activeJobs.length === 0) return;
+      const settings = await this.getSystemSettings();
+      const botUrl = settings.botServiceUrl || 'http://127.0.0.1:5001';
+
+      for (const job of activeJobs) {
+        if (Date.now() - new Date(job.updatedAt).getTime() < 8000) {
+          continue;
+        }
+
+        let workerAlive = false;
+        const checkUrl = job.directWorkerUrl || botUrl;
+        try {
+          const probe = await fetch(`${checkUrl}/jobs/${job.id}/status`, {
+            headers: { 'x-bot-api-key': settings.botApiKey || 'trumark-bot-secret' },
+            signal: AbortSignal.timeout(2500),
+          });
+          if (probe.ok) {
+            const workerJob = (await probe.json()) as { status?: string };
+            if (workerJob.status !== 'FAILED' && workerJob.status !== 'COMPLETED') {
+              workerAlive = true;
+            }
+          }
+        } catch {
+          workerAlive = false;
+        }
+
+        if (workerAlive) continue;
+
+        this.logger.warn(
+          `[Watchdog] Active job ${job.id} lost its worker (${checkUrl}). Attempting automatic respawn...`,
+        );
+
+        try {
+          const resJson = await this.dispatchToWorker(job, settings);
+          await this.prisma.onlineAttendanceJob.update({
+            where: { id: job.id },
+            data: {
+              status: BotStatus.DISPATCHED,
+              statusMessage: 'Worker recovered; auto-respawning bot and resuming attendance...',
+              directWorkerUrl: resJson.directWorkerUrl || null,
+              lastHeartbeat: new Date(),
+            },
+          });
+          this.logger.log(`[Watchdog] Auto-respawned job ${job.id} on healthy worker.`);
+        } catch (err: any) {
+          this.logger.warn(
+            `[Watchdog] No healthy worker available yet for job ${job.id}: ${err?.message || err}`,
+          );
+          await this.prisma.onlineAttendanceJob.update({
+            where: { id: job.id },
+            data: {
+              status: BotStatus.DISPATCHED,
+              statusMessage: 'Worker unreachable; waiting for healthy worker to auto-respawn...',
+              directWorkerUrl: null,
+            },
+          });
+        }
+      }
+    } finally {
+      this.watchdogRunning = false;
     }
   }
 
@@ -379,16 +489,18 @@ export class OnlineAttendanceService {
 
     if (!job) return null;
 
-    // Check for missed heartbeats (worker crash detection: >90s)
+    // Surface stale heartbeat warning without marking FAILED while watchdog heals it
     const isStale =
       job.status !== BotStatus.COMPLETED &&
       job.status !== BotStatus.FAILED &&
-      Date.now() - new Date(job.lastHeartbeat).getTime() > 90000;
+      Date.now() - new Date(job.lastHeartbeat).getTime() > 25000;
 
-    const effectiveStatus = isStale ? BotStatus.FAILED : job.status;
-    const effectiveMessage = isStale
-      ? 'Worker timed out (no heartbeat received for >90s). Click launch to auto-recover.'
-      : job.statusMessage;
+    const effectiveStatus = job.status;
+    const baseMessage = job.statusMessage || '';
+    const effectiveMessage =
+      isStale && !baseMessage.includes('(Reconnecting to worker...)')
+        ? `${baseMessage} (Reconnecting to worker...)`.trim()
+        : baseMessage;
 
     // Map attendeeMinutes to student full names for UI
     const minutesMap = (job.attendeeMinutes as Record<string, number>) || {};
