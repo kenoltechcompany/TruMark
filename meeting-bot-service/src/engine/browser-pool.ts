@@ -1,11 +1,18 @@
 import { chromium, Browser, BrowserContext } from 'playwright';
+import { existsSync } from 'node:fs';
 
 export class BrowserPool {
   private static browserInstance: Browser | null = null;
 
   public static async getBrowser(): Promise<Browser> {
     if (!this.browserInstance || !this.browserInstance.isConnected()) {
+      const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+      const edgePath = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+      const executablePath = existsSync(chromePath) ? chromePath : (existsSync(edgePath) ? edgePath : undefined);
+
       this.browserInstance = await chromium.launch({
+        executablePath,
+        channel: executablePath ? undefined : 'chrome',
         headless: true,
         args: [
           '--disable-blink-features=AutomationControlled',
