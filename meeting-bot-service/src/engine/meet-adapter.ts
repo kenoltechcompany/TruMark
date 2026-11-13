@@ -135,13 +135,9 @@ export class GoogleMeetAdapter {
           await this.clickContinueWithoutDevicesIfPresent(1500);
           console.log(`[GoogleMeetAdapter:${this.jobId}] Entering display name: "${this.botDisplayName}"`);
           await nameInput.click({ timeout: 5000 });
-          await nameInput.fill('');
-          await nameInput.pressSequentially(this.botDisplayName, { delay: 35 });
-          await this.page.waitForTimeout(400);
+          await nameInput.fill(this.botDisplayName);
+          await this.page.waitForTimeout(300);
         }
-
-        // Mute mic/camera if toggles are present (fallback when devices are available)
-        await this.muteMediaIfVisible();
 
         // Click Join / Ask to join using trusted Playwright pointer click first
         await retryActionWithWait(
@@ -217,34 +213,30 @@ export class GoogleMeetAdapter {
   private async waitForPreJoinReady(): Promise<void> {
     if (!this.page) return;
 
-    // Wait up to 15s for any pre-join element or error heading to render
-    await this.page
-      .locator(
-        'input[type="text"], button:has-text("Continue without microphone and camera"), button:has-text("Ask to join"), button:has-text("Join now"), h1',
-      )
-      .first()
-      .waitFor({ state: 'visible', timeout: 15000 })
-      .catch(() => {});
+    const continueBtn = this.page
+      .locator('button')
+      .filter({
+        hasText: /Continue without microphone and camera|Continue without microphone|Ohne Mikrofon und Kamera fortfahren/i,
+      })
+      .first();
+    const nameInput = this.page.locator('input[type="text"]').first();
+    const joinBtn = this.page
+      .locator('button')
+      .filter({ hasText: /^Ask to join$|^Join now$|^Join anyway$/i })
+      .first();
 
-    // If "Getting ready..." is currently visible, wait up to 12s for it to clear
-    const isGettingReady = await this.page
-      .evaluate(() => Boolean(document.body?.innerText?.includes('Getting ready')))
-      .catch(() => false);
-    if (isGettingReady) {
-      await this.page
-        .waitForFunction(
-          () => !document.body?.innerText?.includes('Getting ready'),
-          { timeout: 12000 },
-        )
-        .catch(() => {});
-    }
+    await Promise.race([
+      continueBtn.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {}),
+      nameInput.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {}),
+      joinBtn.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {}),
+    ]);
 
     await this.clickContinueWithoutDevicesIfPresent(3000);
-    await this.page
-      .locator('input[type="text"], button:has-text("Ask to join"), button:has-text("Join now")')
-      .first()
-      .waitFor({ state: 'visible', timeout: 10000 })
-      .catch(() => {});
+
+    await Promise.race([
+      nameInput.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {}),
+      joinBtn.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {}),
+    ]);
 
     // Also dismiss any "Got it" dialog on pre-join if shown
     const gotIt = this.page.locator('button:has-text("Got it"), button:has-text("Dismiss")').first();
