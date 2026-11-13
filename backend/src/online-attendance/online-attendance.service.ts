@@ -80,13 +80,30 @@ export class OnlineAttendanceService {
     const settings = await this.getSystemSettings();
     const botUrl = settings.botServiceUrl || 'http://127.0.0.1:5001';
 
-    // If job already running and active, return existing job
+    // Check if an active job is genuinely still alive on the worker
     if (
       session.onlineJob &&
       session.onlineJob.status !== BotStatus.FAILED &&
       session.onlineJob.status !== BotStatus.COMPLETED
     ) {
-      return session.onlineJob;
+      let workerAlive = false;
+      const checkUrl = session.onlineJob.directWorkerUrl || botUrl;
+      try {
+        const probe = await fetch(`${checkUrl}/jobs/${session.onlineJob.id}`, {
+          headers: { 'x-bot-api-key': settings.botApiKey || 'trumark-bot-secret' },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (probe.ok) {
+          workerAlive = true;
+        }
+      } catch {
+        workerAlive = false;
+      }
+
+      if (workerAlive) {
+        return session.onlineJob;
+      }
+      this.logger.warn(`Existing job ${session.onlineJob.id} is stale or worker restarted. Re-dispatching...`);
     }
 
     // Upsert OnlineAttendanceJob record

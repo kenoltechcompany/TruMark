@@ -26,7 +26,10 @@ export class GoogleMeetAdapter {
       // Go to Google Meet URL
       console.log(`[GoogleMeetAdapter] Navigating to ${this.meetingUrl}...`);
       await this.page.goto(this.meetingUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await this.page.waitForTimeout(3000);
+
+      // Wait for Google Meet pre-join screen ("Getting ready..." finishes and join button or name input appears)
+      console.log('[GoogleMeetAdapter] Waiting for Google Meet pre-join screen to finish loading...');
+      await this.waitForPreJoinReady();
 
       // Dismiss any initial popups/modals
       await this.dismissInitialDialogs();
@@ -40,12 +43,29 @@ export class GoogleMeetAdapter {
       // Click "Join now" or "Ask to join"
       await this.clickJoinButton();
 
+      // Give Meet a moment to transition to lobby or in-call state
+      await this.page.waitForTimeout(2000);
+
       // Monitor admission state in call or lobby
       await this.monitorAdmission();
     } catch (err: any) {
       console.error(`[GoogleMeetAdapter] Startup error: ${err.message}`);
       this.callbacks.onStatusChange('FAILED', `Failed to join Google Meet: ${err.message}`);
       await this.close();
+    }
+  }
+
+  private async waitForPreJoinReady(): Promise<void> {
+    if (!this.page) return;
+    try {
+      await Promise.race([
+        this.page.locator('button:has-text("Ask to join"), button:has-text("Join now"), button:has-text("Ask to enter")').first().waitFor({ state: 'visible', timeout: 25000 }),
+        this.page.locator('input[placeholder*="Your name" i], input[aria-label*="Your name" i]').first().waitFor({ state: 'visible', timeout: 25000 }),
+        this.page.locator('text=/you can\'t join this video call/i').first().waitFor({ state: 'visible', timeout: 25000 }),
+      ]);
+      await this.page.waitForTimeout(800);
+    } catch {
+      console.log('[GoogleMeetAdapter] Pre-join wait timed out, proceeding with available DOM...');
     }
   }
 
@@ -154,7 +174,7 @@ export class GoogleMeetAdapter {
 
         // 2. Detect Waiting for host admission
         const waitingPrompt = this.page
-          .locator('text=/waiting to be admitted|someone will let you in|asked to join|you asked to join|waiting for the host/i')
+          .locator('text=/asking to join|you\'ll join the call when someone lets you in|waiting to be admitted|someone will let you in|asked to join|you asked to join|waiting for the host/i')
           .first();
 
         if (await waitingPrompt.isVisible().catch(() => false)) {
@@ -168,7 +188,7 @@ export class GoogleMeetAdapter {
 
         // 3. Detect Denied, Inactive call, or Removed
         const deniedPrompt = this.page
-          .locator('text=/can\'t join this video call|someone denied your request|removed from the meeting|denied|can\'t join/i')
+          .locator('text=/you can\'t join this video call|someone in the call denied your request|you\'ve been removed from the meeting|no one can join a meeting unless invited/i')
           .first();
 
         if (await deniedPrompt.isVisible().catch(() => false)) {
