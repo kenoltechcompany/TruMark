@@ -300,12 +300,14 @@ export class GoogleMeetAdapter {
       const state = await this.page
         .evaluate(
           ({ deniedConst, timeoutConst, lobbyConst }) => {
-            const bodyText = document.body?.innerText || '';
+            const rawBodyText = document.body?.innerText || '';
+            const bodyText = rawBodyText.replace(/\u2019/g, "'");
 
             if (
               bodyText.includes(deniedConst) ||
               bodyText.includes("You can't join this video call") ||
-              bodyText.includes('No one can join a meeting unless invited')
+              bodyText.includes('No one can join a meeting unless invited') ||
+              bodyText.includes('Asking to join was denied')
             ) {
               return { status: 'DENIED', bodyText };
             }
