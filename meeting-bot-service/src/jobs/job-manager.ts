@@ -42,16 +42,30 @@ export class JobManager {
 
   public static async startJob(dto: StartJobDto): Promise<{ success: boolean; jobId: string }> {
     console.log(`[JobManager] Starting job ${dto.jobId} for meeting: ${dto.meetingUrl} (TimeBound: ${Boolean(dto.isTimeBound)})`);
-    if (this.jobs.has(dto.jobId)) {
-      // Idempotency: if job already running, return existing
-      console.log(`[JobManager] Job ${dto.jobId} is already running.`);
-      return { success: true, jobId: dto.jobId };
+    const existing = this.jobs.get(dto.jobId);
+    if (existing) {
+      const isTerminal = existing.status === 'FAILED' || existing.status === 'COMPLETED';
+      const ageMs = Date.now() - existing.startedAt.getTime();
+      const isDead = ageMs > 20000 && !existing.adapter.isAlive();
+
+      if (!isTerminal && !isDead) {
+        console.log(`[JobManager] Job ${dto.jobId} is already active (status=${existing.status}). Returning idempotently.`);
+        return { success: true, jobId: dto.jobId };
+      }
+
+      console.warn(`[JobManager] Cleaning up stale/terminal job ${dto.jobId} (status=${existing.status}, dead=${isDead}) before respawn.`);
+      if (existing.intervalTimer) {
+        clearInterval(existing.intervalTimer);
+        existing.intervalTimer = null;
+      }
+      await existing.adapter.close().catch(() => {});
+      this.jobs.delete(dto.jobId);
     }
 
     const parser = new IdParser(dto.idRules);
     let job: ActiveJob;
 
-    const adapter = new GoogleMeetAdapter(dto.meetingUrl, config.botDisplayName, {
+    const adapter = new GoogleMeetAdapter(dto.jobId, dto.meetingUrl, config.botDisplayName, {
       onStatusChange: (status, message) => {
         if (job) {
           console.log(`[JobManager] Job ${job.id} status changed to ${status}: ${message || ''}`);

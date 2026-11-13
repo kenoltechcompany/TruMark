@@ -19,7 +19,7 @@ function getLocalIp(): string {
 export const config = {
   port: parseInt(process.env.PORT || '5001', 10),
   apiKey: process.env.BOT_API_KEY || 'trumark-bot-secret',
-  botDisplayName: process.env.BOT_DISPLAY_NAME || 'TruMark Attendance Bot',
+  botDisplayName: process.env.BOT_DISPLAY_NAME || 'TruMark Attendance',
   // Direct worker address reported to TruMark to bypass load balancers
   directWorkerUrl:
     process.env.DIRECT_WORKER_URL ||
