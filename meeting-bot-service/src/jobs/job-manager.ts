@@ -41,8 +41,10 @@ export class JobManager {
   }
 
   public static async startJob(dto: StartJobDto): Promise<{ success: boolean; jobId: string }> {
+    console.log(`[JobManager] Starting job ${dto.jobId} for meeting: ${dto.meetingUrl} (TimeBound: ${Boolean(dto.isTimeBound)})`);
     if (this.jobs.has(dto.jobId)) {
       // Idempotency: if job already running, return existing
+      console.log(`[JobManager] Job ${dto.jobId} is already running.`);
       return { success: true, jobId: dto.jobId };
     }
 
@@ -52,15 +54,18 @@ export class JobManager {
     const adapter = new GoogleMeetAdapter(dto.meetingUrl, config.botDisplayName, {
       onStatusChange: (status, message) => {
         if (job) {
+          console.log(`[JobManager] Job ${job.id} status changed to ${status}: ${message || ''}`);
           job.status = status as any;
           job.statusMessage = message || '';
           this.sendHeartbeat(job).catch(() => {});
 
           if (status === 'JOINED' && !dto.isTimeBound) {
             // Snapshot Mode: run single pass once joined
+            console.log(`[JobManager] Starting Snapshot pass for job ${job.id}...`);
             this.runSnapshotPass(job).catch(() => {});
           } else if (status === 'JOINED' && dto.isTimeBound) {
             // Time-Bound Mode: start 5-minute sampling engine
+            console.log(`[JobManager] Starting Time-Bound engine for job ${job.id}...`);
             this.startTimeBoundEngine(job).catch(() => {});
           }
         }
@@ -185,7 +190,8 @@ export class JobManager {
 
   private static async sendHeartbeat(job: ActiveJob): Promise<void> {
     try {
-      await fetch(`${job.dto.callbackUrl}/heartbeat`, {
+      console.log(`[JobManager] Sending heartbeat for job ${job.id}: status=${job.status}, cycle=${job.cycleCount}`);
+      const res = await fetch(`${job.dto.callbackUrl}/heartbeat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -201,7 +207,12 @@ export class JobManager {
           attendeeMinutes: job.attendeeMinutes,
         }),
       });
-    } catch {}
+      if (!res.ok) {
+        console.warn(`[JobManager] Heartbeat returned non-OK status: ${res.status}`);
+      }
+    } catch (err: any) {
+      console.error(`[JobManager] Failed to send heartbeat: ${err.message}`);
+    }
   }
 
   private static async finalizeAttendance(job: ActiveJob): Promise<void> {
@@ -217,8 +228,10 @@ export class JobManager {
       }
     }
 
+    console.log(`[JobManager] Finalizing attendance for job ${job.id}: ${qualifiedStudents.length} qualified students.`);
+
     try {
-      await fetch(`${job.dto.callbackUrl}/conclude`, {
+      const res = await fetch(`${job.dto.callbackUrl}/conclude`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -233,6 +246,9 @@ export class JobManager {
           totalCycles: job.cycleCount,
         }),
       });
-    } catch {}
+      console.log(`[JobManager] Conclusion callback dispatched, status: ${res.status}`);
+    } catch (err: any) {
+      console.error(`[JobManager] Failed to dispatch conclude callback: ${err.message}`);
+    }
   }
 }

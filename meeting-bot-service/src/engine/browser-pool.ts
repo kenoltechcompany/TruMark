@@ -1,40 +1,33 @@
-import { chromium, Browser, BrowserContext } from 'playwright';
-import { existsSync } from 'node:fs';
+import { chromium, BrowserContext } from 'playwright';
+import { existsSync, mkdirSync } from 'node:fs';
+import { config } from '../config';
 
 export class BrowserPool {
-  private static browserInstance: Browser | null = null;
-
-  public static async getBrowser(): Promise<Browser> {
-    if (!this.browserInstance || !this.browserInstance.isConnected()) {
-      const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-      const edgePath = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-      const executablePath = existsSync(chromePath) ? chromePath : (existsSync(edgePath) ? edgePath : undefined);
-
-      this.browserInstance = await chromium.launch({
-        executablePath,
-        channel: executablePath ? undefined : 'chrome',
-        headless: true,
-        args: [
-          '--disable-blink-features=AutomationControlled',
-          '--use-fake-ui-for-media-stream',
-          '--use-fake-device-for-media-stream',
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-        ],
-      });
-    }
-    return this.browserInstance;
-  }
-
   public static async createContext(): Promise<BrowserContext> {
-    const browser = await this.getBrowser();
-    const context = await browser.newContext({
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      permissions: ['camera', 'microphone'],
+    const profilePath = config.profileDir;
+    if (!existsSync(profilePath)) {
+      mkdirSync(profilePath, { recursive: true });
+    }
+
+    console.log(`[BrowserPool] Launching persistent context using channel: ${config.browserChannel}, headless: ${config.headless}, profile: ${profilePath}`);
+
+    const context = await chromium.launchPersistentContext(profilePath, {
+      channel: config.browserChannel as any,
+      headless: config.headless,
+      args: [
+        '--disable-blink-features=AutomationControlled',
+        '--use-fake-ui-for-media-stream',
+        '--use-fake-device-for-media-stream',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--window-size=1280,720',
+        '--autoplay-policy=no-user-gesture-required',
+      ],
       viewport: { width: 1280, height: 720 },
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
+      permissions: ['camera', 'microphone'],
     });
 
     // Mask webdriver property
@@ -48,9 +41,6 @@ export class BrowserPool {
   }
 
   public static async closeAll(): Promise<void> {
-    if (this.browserInstance) {
-      await this.browserInstance.close().catch(() => {});
-      this.browserInstance = null;
-    }
+    // Persistent contexts are closed per adapter
   }
 }

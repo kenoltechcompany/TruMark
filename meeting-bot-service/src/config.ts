@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import os from 'os';
+import path from 'path';
 
 dotenv.config();
 
@@ -24,4 +25,7 @@ export const config = {
     process.env.DIRECT_WORKER_URL ||
     `http://${getLocalIp()}:${process.env.PORT || '5001'}`,
   maxConcurrentJobs: parseInt(process.env.MAX_CONCURRENT_JOBS || '5', 10),
+  headless: process.env.BOT_HEADLESS ? process.env.BOT_HEADLESS === 'true' : false,
+  browserChannel: process.env.BOT_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : 'chrome'),
+  profileDir: process.env.BOT_PROFILE_DIR || path.join(os.homedir(), '.trumark-bot-profile'),
 };
