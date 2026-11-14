@@ -328,10 +328,10 @@ export class PublicRegistrationService {
             session.classId,
             options.imageBuffer,
           );
-          if (!match || (!match.studentId && !match.personId)) {
+          if (!match || !match.studentId) {
             throw new BadRequestException('Face not recognized or confidence too low.');
           }
-          matchedStudentId = match.studentId || null;
+          matchedStudentId = match.studentId;
           confidence = match.confidence;
         }
       } else {
