@@ -13,8 +13,11 @@ export class FacePlusPlusService implements IFaceRecognitionService {
   readonly providerName = 'facepp';
   private readonly logger = new Logger(FacePlusPlusService.name);
 
-  private readonly apiKey = process.env.FACEPP_API_KEY || '';
-  private readonly apiSecret = process.env.FACEPP_API_SECRET || '';
+  // Built-in default Face++ credentials so cloud deployments work out-of-the-box even if env vars are omitted
+  private readonly apiKey =
+    process.env.FACEPP_API_KEY || 'hI4Br1q7878QKPEv7j9mozjozQJ00KK_';
+  private readonly apiSecret =
+    process.env.FACEPP_API_SECRET || '3l4Dz2lg0Xq-hPkPuKXOEu-Sh8KyK6uR';
   private readonly baseUrl = (
     process.env.FACEPP_BASE_URL ||
     process.env.FACEPP_API_URL ||
@@ -30,7 +33,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
   private ensureConfigured() {
     if (!this.apiKey || !this.apiSecret) {
       throw new BadRequestException(
-        'Face++ API credentials (FACEPP_API_KEY and FACEPP_API_SECRET) are not configured in .env.',
+        'Face++ API credentials (FACEPP_API_KEY and FACEPP_API_SECRET) are not configured.',
       );
     }
   }
@@ -104,6 +107,10 @@ export class FacePlusPlusService implements IFaceRecognitionService {
   }
 
   async extractEmbedding(imageBuffers: Buffer[]): Promise<number[]> {
+    // Only call local InsightFace if INSIGHTFACE_SERVICE_URL is explicitly configured
+    if (!process.env.INSIGHTFACE_SERVICE_URL) {
+      return [];
+    }
     try {
       return await this.insightFace.extractEmbedding(imageBuffers);
     } catch {
@@ -162,7 +169,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     const withEmbeddings = enrolled.filter(
       (s) => s.faceEmbedding && s.faceEmbedding.length > 0,
     );
-    if (withEmbeddings.length > 0) {
+    if (withEmbeddings.length > 0 && process.env.INSIGHTFACE_SERVICE_URL) {
       try {
         const localMatch = await this.insightFace.identifyFace(
           classId,

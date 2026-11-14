@@ -18,7 +18,12 @@ export class FaceRecognitionService implements IFaceRecognitionService {
     private readonly azureAdapterService: AzureFaceAdapterService,
     private readonly facePlusPlusService: FacePlusPlusService,
   ) {
-    const configuredProvider = (process.env.FACE_PROVIDER || 'insightface').toLowerCase();
+    // Default to 'facepp' in cloud deployments unless explicitly set to 'azure' or 'insightface'
+    const rawProvider = process.env.FACE_PROVIDER;
+    const hasInsightFaceUrl = Boolean(process.env.INSIGHTFACE_SERVICE_URL);
+    const configuredProvider = (
+      rawProvider || (hasInsightFaceUrl ? 'insightface' : 'facepp')
+    ).toLowerCase();
 
     if (configuredProvider === 'facepp' || configuredProvider === 'face++') {
       this.activeService = this.facePlusPlusService;
