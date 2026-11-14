@@ -1,6 +1,19 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
+import {
+  User,
+  Hash,
+  Camera,
+  CheckCircle2,
+  ShieldCheck,
+  AlertCircle,
+  ArrowRight,
+  ArrowLeft,
+  RefreshCw,
+  Lock,
+  Sparkles,
+} from 'lucide-react';
 import apiClient from '../../api/client';
 
 export default function PublicRegistrationPage() {
@@ -59,8 +72,8 @@ export default function PublicRegistrationPage() {
   const submitMutation = useMutation({
     mutationFn: async (images: Blob[]) => {
       const formData = new FormData();
-      formData.append('fullName', fullName);
-      formData.append('indexNumber', indexNumber);
+      formData.append('fullName', fullName.trim());
+      formData.append('indexNumber', indexNumber.trim());
       images.forEach((img, i) =>
         formData.append('images', img, `capture_${i + 1}.jpg`),
       );
@@ -74,11 +87,10 @@ export default function PublicRegistrationPage() {
     },
     onSuccess: () => setStep('done'),
     onError: (err: any) => {
-      setError(err.response?.data?.message || 'Registration failed.');
+      setError(err.response?.data?.message || 'Registration failed. Ensure your face is clearly visible.');
       setStep('biometrics');
       setCapturedImages([]);
       setCurrentCapture(0);
-      // Restart camera if stopped
       startCamera();
     },
   });
@@ -86,13 +98,14 @@ export default function PublicRegistrationPage() {
   // ── Camera controls ──
   const startCamera = async () => {
     try {
+      setError('');
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
       });
       streamRef.current = stream;
       setStep('biometrics');
     } catch {
-      setError('Could not access camera. Please grant camera permissions.');
+      setError('Could not access camera. Please grant webcam permissions in your browser.');
     }
   };
 
@@ -114,7 +127,6 @@ export default function PublicRegistrationPage() {
         setCapturedImages(next);
 
         if (currentCapture >= 2) {
-          // All 3 captured
           stopCamera();
           submitMutation.mutate(next);
         } else {
@@ -134,183 +146,312 @@ export default function PublicRegistrationPage() {
   };
 
   const prompts = [
-    'Look straight at the camera',
-    'Turn slightly to your left',
-    'Turn slightly to your right',
+    { title: 'Angle 1 of 3: Front Profile', instruction: 'Look straight into the camera with neutral lighting' },
+    { title: 'Angle 2 of 3: Slight Left Turn', instruction: 'Turn your head slightly to your left (~15 degrees)' },
+    { title: 'Angle 3 of 3: Slight Right Turn', instruction: 'Turn your head slightly to your right (~15 degrees)' },
   ];
 
-  // ── Render states ──
-  if (step === 'checking') {
-    return (
-      <div className="min-h-screen bg-[#F6F8FA] flex items-center justify-center p-4">
-        <p className="text-[#656D76]">Checking registration status…</p>
-      </div>
-    );
-  }
-
-  if (step === 'expired') {
-    return (
-      <div className="min-h-screen bg-[#F6F8FA] flex items-center justify-center p-4">
-        <div className="bg-white border border-[#D0D7DE] rounded-md shadow-sm p-6 w-full max-w-md text-center">
-          <h2 className="text-lg font-semibold text-[#1F2328] mb-2">
-            Registration Window Closed
-          </h2>
-          <p className="text-sm text-[#656D76]">
-            The registration link for this class is currently disabled. Please contact
-            your course representative or instructor to open registration.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === 'done') {
-    return (
-      <div className="min-h-screen bg-[#F6F8FA] flex items-center justify-center p-4">
-        <div className="bg-white border border-[#D0D7DE] rounded-md shadow-sm p-6 w-full max-w-md text-center">
-          <div className="w-12 h-12 bg-[#E6F6EC] text-[#1F883D] rounded-full flex items-center justify-center mx-auto mb-3 text-xl font-bold">
-            ✓
-          </div>
-          <h2 className="text-lg font-semibold text-[#1F2328] mb-2">
-            Registration Complete
-          </h2>
-          <p className="text-sm text-[#656D76] mb-4">
-            You are enrolled in <strong>{className}</strong>. Your profile and biometric face reference have been registered successfully.
-          </p>
-          <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-md p-3 text-xs text-[#656D76] text-left">
-            <div>
-              <strong>Name:</strong> {fullName}
-            </div>
-            <div>
-              <strong>Index Number:</strong> {indexNumber}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const activeStepIndex = step === 'identity' ? 0 : step === 'biometrics' ? 1 : 2;
 
   return (
-    <div className="min-h-screen bg-[#F6F8FA] flex items-center justify-center p-4">
-      <div className="bg-white border border-[#D0D7DE] rounded-md shadow-sm p-6 w-full max-w-lg">
-        <h2 className="text-lg font-semibold text-[#1F2328] mb-1">
-          Register for {className}
-        </h2>
-        <p className="text-xs text-[#656D76] mb-4">
-          Self-onboarding for TruMark biometric attendance.
-        </p>
+    <div className="min-h-screen neu-surface flex flex-col justify-between text-[#1F2328] font-sans">
+      {/* ── Top Header ── */}
+      <header className="bg-white border-b border-[#D0D7DE] py-3 px-4 sm:px-6 sticky top-0 z-30">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <img
+              src="/logo-nav.png"
+              alt="TruMark Class Attendance System"
+              className="h-8 sm:h-9 w-auto object-contain transition-transform group-hover:scale-[1.02]"
+            />
+          </Link>
 
-        {error && (
-          <div className="bg-[#FFEBE9] border border-[#FF8182] text-[#D73A49] text-xs p-2.5 rounded-md mb-4">
-            {error}
+          <div className="flex items-center gap-2.5">
+            <span className="neu-pill px-3 py-1 text-[11px] font-medium text-[#1F2328]">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#1F883D]" />
+              <span>Face++ 3-Angle Enrollment</span>
+            </span>
           </div>
-        )}
-
-        {/* Step indicators */}
-        <div className="flex gap-2 mb-4">
-          {['Identity', 'Biometrics (3 Photos)', 'Submitted'].map((label, i) => {
-            const activeIdx = step === 'identity' ? 0 : step === 'biometrics' ? 1 : 2;
-            return (
-              <div
-                key={label}
-                className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                  i === activeIdx
-                    ? 'bg-[#0969DA] text-white'
-                    : i < activeIdx
-                    ? 'bg-[#1F883D] text-white'
-                    : 'bg-[#F6F8FA] text-[#656D76] border border-[#D0D7DE]'
-                }`}
-              >
-                {label}
-              </div>
-            );
-          })}
         </div>
+      </header>
 
-        {step === 'identity' && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              startCamera();
-            }}
-            className="space-y-3"
-          >
-            <div>
-              <label className="block text-xs text-[#656D76] mb-1">Full Name</label>
-              <input
-                type="text"
-                placeholder="e.g. Ama Osei"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="border border-[#D0D7DE] rounded-md px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA] shadow-sm"
-                required
-              />
+      {/* ── Main Content ── */}
+      <main className="max-w-xl w-full mx-auto px-4 py-8 sm:px-6 my-auto">
+        {step === 'checking' && (
+          <div className="bg-white border border-[#D0D7DE] rounded-xl p-12 text-center shadow-xs animate-enter">
+            <div className="inline-flex items-center justify-center w-12 h-12 neu-raised mb-4">
+              <RefreshCw className="w-5 h-5 text-[#0969DA] animate-spin" />
             </div>
-            <div>
-              <label className="block text-xs text-[#656D76] mb-1">Index Number</label>
-              <input
-                type="text"
-                placeholder="e.g. 10928374"
-                value={indexNumber}
-                onChange={(e) => setIndexNumber(e.target.value)}
-                className="border border-[#D0D7DE] rounded-md px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA] shadow-sm"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              className="bg-[#0969DA] text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#0353A4] transition-colors"
-            >
-              Next: Take Reference Photos
-            </button>
-          </form>
+            <p className="text-sm font-semibold text-[#1F2328]">Verifying Class Onboarding Link...</p>
+            <p className="text-xs text-[#656D76] mt-1">Checking enrollment window status</p>
+          </div>
         )}
 
-        {step === 'biometrics' && (
-          <div className="space-y-3">
-            <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-md p-2.5 text-xs text-[#1F2328]">
-              <strong>Photo {currentCapture + 1} of 3:</strong>{' '}
-              {prompts[currentCapture]}
+        {step === 'expired' && (
+          <div className="bg-white border border-[#D0D7DE] rounded-xl p-8 text-center shadow-xs animate-enter">
+            <div className="w-14 h-14 neu-raised flex items-center justify-center text-[#CF222E] mx-auto mb-4">
+              <Lock className="w-6 h-6" />
+            </div>
+            <h2 className="text-lg font-bold text-[#1F2328] mb-1.5">
+              Registration Window Closed
+            </h2>
+            <p className="text-xs sm:text-sm text-[#656D76] max-w-md mx-auto mb-6">
+              Self-onboarding for <strong>{className || 'this class'}</strong> is currently disabled. Contact your Course Representative or lecturer to open the registration switch.
+            </p>
+            <Link
+              to="/check-in"
+              className="inline-flex items-center gap-1.5 bg-[#0969DA] text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-[#0353A4] transition-colors"
+            >
+              <span>Go to Session Check-In</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
+
+        {step === 'done' && (
+          <div className="bg-white border border-[#34D058] rounded-xl p-8 text-center shadow-sm animate-enter">
+            <div className="w-16 h-16 neu-raised flex items-center justify-center text-[#1F883D] mx-auto mb-4">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-bold text-[#1F2328] mb-1">
+              Biometric Profile Enrolled
+            </h2>
+            <p className="text-xs text-[#1F883D] font-semibold mb-6">
+              Your 3-angle facial signature has been registered for {className}.
+            </p>
+
+            <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl p-4 text-left max-w-sm mx-auto mb-6 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-[#656D76]">Full Name</span>
+                <span className="font-bold text-[#1F2328]">{fullName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#656D76]">Index Number</span>
+                <span className="font-mono font-bold text-[#1F2328]">{indexNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#656D76]">Enrolled Class</span>
+                <span className="font-medium text-[#1F2328]">{className}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#656D76]">Biometric Status</span>
+                <span className="text-[#1F883D] font-bold">3 / 3 Reference Captures</span>
+              </div>
             </div>
 
-            <div className="relative aspect-video bg-black rounded-md overflow-hidden">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <canvas ref={canvasRef} className="hidden" />
+            <Link
+              to="/check-in"
+              className="inline-flex items-center gap-1.5 bg-[#0969DA] text-white px-5 py-2.5 rounded-lg text-xs font-semibold hover:bg-[#0353A4] transition-colors"
+            >
+              <span>Proceed to Session Check-In</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={snapPhoto}
-                disabled={submitMutation.isPending}
-                className="bg-[#1F883D] text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#1A7F37] transition-colors disabled:opacity-50"
-              >
-                {submitMutation.isPending
-                  ? 'Submitting…'
-                  : `Capture Photo (${currentCapture + 1}/3)`}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  stopCamera();
-                  setCapturedImages([]);
-                  setCurrentCapture(0);
-                  setStep('identity');
-                }}
-                className="bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#F3F4F6] transition-colors"
-              >
-                Back
-              </button>
+        {(step === 'identity' || step === 'biometrics') && (
+          <div className="space-y-5 animate-enter">
+            {/* Title Banner */}
+            <div className="text-center">
+              <span className="border-l-2 border-[#0969DA] pl-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#656D76]">
+                Student Self-Onboarding
+              </span>
+              <h2 className="text-2xl font-bold text-[#1F2328] mt-1">
+                {className}
+              </h2>
+              <p className="text-xs text-[#656D76] mt-1">
+                Register your student index number and 3 reference face angles for instant classroom check-in.
+              </p>
+            </div>
+
+            {/* Tactile Segmented Step Track */}
+            <div className="flex justify-center">
+              <div className="neu-track w-full grid grid-cols-3 text-center text-xs">
+                {['1. Identity', '2. Biometrics', '3. Enrolled'].map((label, i) => (
+                  <div
+                    key={label}
+                    className={`neu-tab py-2 px-2 font-semibold ${
+                      i === activeStepIndex
+                        ? 'active text-[#0969DA]'
+                        : i < activeStepIndex
+                        ? 'text-[#1F883D]'
+                        : 'text-[#656D76]'
+                    }`}
+                  >
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Main Card */}
+            <div className="bg-white border border-[#D0D7DE] rounded-xl p-6 shadow-xs">
+              {error && (
+                <div
+                  role="alert"
+                  className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] text-xs p-3 rounded-lg mb-4 flex items-center gap-2 animate-enter"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {step === 'identity' && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    startCamera();
+                  }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2328] mb-1.5">
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-[#656D76] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="e.g. Ama Osei"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="border border-[#D0D7DE] rounded-lg pl-9 pr-3.5 py-2.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:border-[#0969DA]"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2328] mb-1.5">
+                      Student Index Number
+                    </label>
+                    <div className="relative">
+                      <Hash className="w-4 h-4 text-[#656D76] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="e.g. 10928374"
+                        value={indexNumber}
+                        onChange={(e) => setIndexNumber(e.target.value)}
+                        className="border border-[#D0D7DE] rounded-lg pl-9 pr-3.5 py-2.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:border-[#0969DA]"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-1">
+                    <button
+                      type="submit"
+                      className="w-full bg-[#0969DA] text-white py-2.5 px-4 rounded-lg text-sm font-semibold hover:bg-[#0353A4] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span>Continue to Biometric Capture</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {step === 'biometrics' && (
+                <div className="space-y-4">
+                  {/* 3-Photo Progress Prompt */}
+                  <div className="neu-raised p-3.5 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-white border border-[#D0D7DE] flex items-center justify-center text-[#0969DA] font-bold text-xs shrink-0">
+                        {currentCapture + 1}/3
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-[#1F2328]">
+                          {prompts[currentCapture]?.title}
+                        </div>
+                        <div className="text-[11px] text-[#656D76]">
+                          {prompts[currentCapture]?.instruction}
+                        </div>
+                      </div>
+                    </div>
+                    <Sparkles className="w-4 h-4 text-[#0969DA] shrink-0" />
+                  </div>
+
+                  {/* Camera Viewfinder */}
+                  <div className="relative aspect-[4/3] bg-[#0D1117] rounded-xl overflow-hidden border border-[#1F2328] flex items-center justify-center">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover transform -scale-x-100"
+                    />
+                    <canvas ref={canvasRef} className="hidden" />
+
+                    {/* Corner Brackets */}
+                    <div className="absolute inset-4 pointer-events-none">
+                      <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-white/70 rounded-tl" />
+                      <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-white/70 rounded-tr" />
+                      <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-white/70 rounded-bl" />
+                      <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-white/70 rounded-br" />
+                    </div>
+
+                    {/* Alignment Oval + Scan Line */}
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                      <div className="relative w-44 h-60 border-2 border-dashed border-[#34D058] rounded-full flex items-center justify-center overflow-hidden">
+                        <div className="w-36 h-0.5 bg-[#34D058]/85 rounded-full animate-scan-line" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tactile Shutter Bar */}
+                  <div className="neu-surface border border-[#D0D7DE] rounded-xl p-3.5 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopCamera();
+                        setCapturedImages([]);
+                        setCurrentCapture(0);
+                        setStep('identity');
+                      }}
+                      className="inline-flex items-center gap-1.5 bg-white border border-[#D0D7DE] text-[#1F2328] px-3 py-2 rounded-lg text-xs font-semibold hover:bg-[#F6F8FA] transition-colors cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back</span>
+                    </button>
+
+                    <div className="text-center">
+                      <div className="text-xs font-bold text-[#1F2328]">
+                        {submitMutation.isPending
+                          ? 'Enrolling Biometrics...'
+                          : `Capture Photo ${currentCapture + 1} of 3`}
+                      </div>
+                      <div className="text-[11px] text-[#656D76]">
+                        {submitMutation.isPending
+                          ? 'Validating with Face++ engine'
+                          : 'Tap shutter when aligned'}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={snapPhoto}
+                      disabled={submitMutation.isPending}
+                      aria-label={`Capture photo ${currentCapture + 1} of 3`}
+                      className="neu-shutter shrink-0"
+                    >
+                      {submitMutation.isPending ? (
+                        <div className="w-6 h-6 border-2 border-[#0969DA] border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-[#1F883D] flex items-center justify-center text-white shadow-xs">
+                          <Camera className="w-5 h-5" />
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
-      </div>
+      </main>
+
+      {/* ── Footer ── */}
+      <footer className="py-4 text-center text-xs text-[#656D76] border-t border-[#D0D7DE] bg-white">
+        TruMark Biometric &amp; Geofenced Attendance System
+      </footer>
     </div>
   );
 }

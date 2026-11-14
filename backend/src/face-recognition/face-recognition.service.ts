@@ -6,6 +6,7 @@ import {
 } from './face-recognition.interface';
 import { InsightFaceService } from './insightface.service';
 import { AzureFaceAdapterService } from './azure-face-adapter.service';
+import { FacePlusPlusService } from './facepp.service';
 
 @Injectable()
 export class FaceRecognitionService implements IFaceRecognitionService {
@@ -15,10 +16,14 @@ export class FaceRecognitionService implements IFaceRecognitionService {
   constructor(
     private readonly insightFaceService: InsightFaceService,
     private readonly azureAdapterService: AzureFaceAdapterService,
+    private readonly facePlusPlusService: FacePlusPlusService,
   ) {
     const configuredProvider = (process.env.FACE_PROVIDER || 'insightface').toLowerCase();
 
-    if (configuredProvider === 'azure') {
+    if (configuredProvider === 'facepp' || configuredProvider === 'face++') {
+      this.activeService = this.facePlusPlusService;
+      this.logger.log('Face Recognition active provider: Face++ (Megvii Cloud API)');
+    } else if (configuredProvider === 'azure') {
       this.activeService = this.azureAdapterService;
       this.logger.log('Face Recognition active provider: Azure Face');
     } else {
@@ -27,12 +32,19 @@ export class FaceRecognitionService implements IFaceRecognitionService {
     }
   }
 
-  get providerName(): 'insightface' | 'azure' {
+  get providerName(): 'insightface' | 'azure' | 'facepp' {
     return this.activeService.providerName;
   }
 
   extractEmbedding(imageBuffers: Buffer[]): Promise<number[]> {
     return this.activeService.extractEmbedding(imageBuffers);
+  }
+
+  async enrollStudentFace(classId: string, imageBuffers: Buffer[]): Promise<string | null> {
+    if (this.activeService.enrollStudentFace) {
+      return this.activeService.enrollStudentFace(classId, imageBuffers);
+    }
+    return null;
   }
 
   identifyFace(

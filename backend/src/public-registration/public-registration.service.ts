@@ -54,23 +54,30 @@ export class PublicRegistrationService {
       throw new BadRequestException('A student with this index number already exists in the system.');
     }
 
-    // Extract facial embedding if using InsightFace
+    // Extract facial embedding (InsightFace) or enroll face_token (Face++)
     let faceEmbedding: number[] = [];
-    if (this.faceRecognition.providerName === 'insightface') {
-      try {
-        const buffers: Buffer[] = [];
-        for (const p of imagePaths) {
-          if (existsSync(p)) {
-            buffers.push(readFileSync(p));
-          }
+    let azurePersonId: string | null = null;
+    try {
+      const buffers: Buffer[] = [];
+      for (const p of imagePaths) {
+        if (existsSync(p)) {
+          buffers.push(readFileSync(p));
         }
-        if (buffers.length > 0) {
+      }
+      if (buffers.length > 0) {
+        if (this.faceRecognition.providerName === 'insightface') {
           faceEmbedding = await this.faceRecognition.extractEmbedding(buffers);
           this.logger.log(`Extracted 512-d facial embedding for new student: ${data.fullName}`);
+        } else if (this.faceRecognition.providerName === 'facepp') {
+          azurePersonId = await this.faceRecognition.enrollStudentFace(classId, buffers);
+          faceEmbedding = await this.faceRecognition.extractEmbedding(buffers);
+          if (azurePersonId) {
+            this.logger.log(`Enrolled Face++ face_token for new student: ${data.fullName}`);
+          }
         }
-      } catch (err: any) {
-        this.logger.warn(`Could not extract facial embedding during registration: ${err.message}`);
       }
+    } catch (err: any) {
+      this.logger.warn(`Could not process facial biometrics during registration: ${err.message}`);
     }
 
     return this.prisma.student.create({
@@ -80,6 +87,7 @@ export class PublicRegistrationService {
         classId,
         imagePaths,
         faceEmbedding,
+        azurePersonId,
       },
       select: {
         id: true,
@@ -319,22 +327,26 @@ export class PublicRegistrationService {
         matchedStudentId = match.studentId;
         confidence = match.confidence;
       } else {
-        // Azure Face identification fallback
+        // Face++ or Azure Face identification
         const match = await this.faceRecognition.identifyFace(session.classId, options.imageBuffer);
-        if (!match || !match.personId) {
+        if (!match || (!match.studentId && !match.personId)) {
           throw new BadRequestException('Face not recognized or confidence too low.');
         }
 
-        const azureStudent = await this.prisma.student.findFirst({
-          where: { azurePersonId: match.personId, classId: session.classId },
-          select: { id: true },
-        });
-        if (!azureStudent) {
-          throw new BadRequestException('Identified face does not match any enrolled student.');
+        if (match.studentId) {
+          matchedStudentId = match.studentId;
+          confidence = match.confidence;
+        } else {
+          const matchedStudent = await this.prisma.student.findFirst({
+            where: { azurePersonId: match.personId, classId: session.classId },
+            select: { id: true },
+          });
+          if (!matchedStudent) {
+            throw new BadRequestException('Identified face does not match any enrolled student.');
+          }
+          matchedStudentId = matchedStudent.id;
+          confidence = match.confidence;
         }
-
-        matchedStudentId = azureStudent.id;
-        confidence = match.confidence;
       }
 
       student = await this.prisma.student.findUnique({

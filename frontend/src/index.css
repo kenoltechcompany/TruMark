@@ -1,1 +1,226 @@
 @import "tailwindcss";
+
+/* ==========================================================================
+   TRUMARK DESIGN SYSTEM: TACTILE MINIMALISM
+   85-90% Functional Minimalist (Shinaa / Primer-inspired)
+   10-15% Selective Neumorphism (Soft UI) on flat matte #EEF2F6 surfaces
+   ========================================================================== */
+
+:root {
+  --tm-bg:          #F6F8FA;
+  --tm-surface:     #FFFFFF;
+  --tm-border:      #D0D7DE;
+  --tm-text:        #1F2328;
+  --tm-text-muted:  #656D76;
+  --tm-primary:     #0969DA;
+  --tm-success:     #1F883D;
+
+  /* Selective Neumorphism Tokens */
+  --neu-bg:         #EEF2F6;
+  --neu-light:      rgba(255, 255, 255, 0.88);
+  --neu-dark:       rgba(163, 177, 198, 0.45);
+  --neu-light-in:   rgba(255, 255, 255, 0.82);
+  --neu-edge:       rgba(255, 255, 255, 0.45);
+  --neu-radius:     16px;
+  --neu-raised:     -6px -6px 14px var(--neu-light), 6px 6px 14px var(--neu-dark);
+  --neu-raised-sm:  -4px -4px 9px var(--neu-light), 4px 4px 9px var(--neu-dark);
+  --neu-inset:      inset -4px -4px 10px var(--neu-light-in), inset 4px 4px 10px var(--neu-dark);
+  --neu-inset-sm:   inset -3px -3px 7px var(--neu-light-in), inset 3px 3px 7px var(--neu-dark);
+}
+
+/* Host surface for selective neumorphic sections */
+.neu-surface {
+  background-color: var(--neu-bg);
+}
+
+/* Soft extruded card / medallion */
+.neu-raised {
+  background-color: var(--neu-bg);
+  border: 1px solid var(--neu-edge);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-raised);
+  transition: box-shadow 0.25s ease, transform 0.2s ease, border-color 0.25s ease;
+}
+
+.neu-raised--press:hover {
+  box-shadow: var(--neu-raised-sm);
+}
+
+.neu-raised--press:active {
+  box-shadow: var(--neu-inset);
+}
+
+/* Soft recessed container / track */
+.neu-inset {
+  background-color: var(--neu-bg);
+  border-radius: var(--neu-radius);
+  box-shadow: var(--neu-inset);
+  transition: box-shadow 0.25s ease;
+}
+
+/* Embossed sensor / status pill */
+.neu-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background-color: var(--neu-bg);
+  color: var(--tm-text);
+  border: 1px solid var(--neu-edge);
+  border-radius: 9999px;
+  box-shadow: var(--neu-raised-sm);
+  transition: box-shadow 0.25s ease, color 0.2s ease;
+}
+
+/* Segmented track + tactile raised tab */
+.neu-track {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  background-color: var(--neu-bg);
+  border-radius: 12px;
+  box-shadow: var(--neu-inset-sm);
+}
+
+.neu-tab {
+  background: transparent;
+  color: var(--tm-text-muted);
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.22s ease;
+}
+
+.neu-tab:hover {
+  color: var(--tm-text);
+}
+
+.neu-tab:focus-visible {
+  outline: 2px solid var(--tm-primary);
+  outline-offset: 1px;
+}
+
+.neu-tab[aria-selected="true"],
+.neu-tab.active {
+  background-color: var(--tm-surface);
+  color: var(--tm-text);
+  border-color: var(--neu-edge);
+  box-shadow: var(--neu-raised-sm);
+}
+
+/* Tactile Camera Shutter Button */
+.neu-shutter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 9999px;
+  background-color: var(--neu-bg);
+  border: 1px solid var(--neu-edge);
+  box-shadow: var(--neu-raised);
+  cursor: pointer;
+  transition: box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+.neu-shutter:hover:not(:disabled) {
+  box-shadow: var(--neu-raised-sm);
+}
+
+.neu-shutter:active:not(:disabled) {
+  box-shadow: var(--neu-inset);
+  transform: scale(0.96);
+}
+
+.neu-shutter:focus-visible {
+  outline: 3px solid rgba(9, 105, 218, 0.35);
+  outline-offset: 3px;
+}
+
+.neu-shutter:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Hardware-style recessed toggle track */
+.neu-switch-track {
+  box-shadow: var(--neu-inset-sm);
+  transition: background-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.neu-switch-track[aria-checked="true"] {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.18);
+}
+
+/* ==========================================================================
+   PURPOSEFUL ANIMATIONS (Quiet, snappy, reduced-motion safe)
+   ========================================================================== */
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scanSweep {
+  0%, 100% {
+    transform: translateY(-88px);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translateY(88px);
+    opacity: 0.75;
+  }
+}
+
+.animate-enter {
+  animation: fadeSlideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-enter-delay-1 {
+  animation: fadeSlideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.06s both;
+}
+
+.animate-enter-delay-2 {
+  animation: fadeSlideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+}
+
+.animate-enter-delay-3 {
+  animation: fadeSlideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+}
+
+.animate-scan-line {
+  animation: scanSweep 2.6s ease-in-out infinite;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --neu-raised:     -4px -4px 10px var(--neu-light), 4px 4px 10px var(--neu-dark);
+    --neu-raised-sm:  -3px -3px 7px var(--neu-light), 3px 3px 7px var(--neu-dark);
+    --neu-inset:      inset -3px -3px 7px var(--neu-light-in), inset 3px 3px 7px var(--neu-dark);
+    --neu-inset-sm:   inset -2px -2px 5px var(--neu-light-in), inset 2px 2px 5px var(--neu-dark);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-enter,
+  .animate-enter-delay-1,
+  .animate-enter-delay-2,
+  .animate-enter-delay-3,
+  .animate-scan-line {
+    animation: none !important;
+  }
+  .neu-raised,
+  .neu-inset,
+  .neu-pill,
+  .neu-tab,
+  .neu-shutter,
+  .neu-switch-track {
+    transition: none !important;
+  }
+}

@@ -17,13 +17,19 @@ export interface SyncStudentResult {
 }
 
 export interface IFaceRecognitionService {
-  providerName: 'insightface' | 'azure';
+  providerName: 'insightface' | 'azure' | 'facepp';
 
   /**
    * Extracts face embedding from one or more reference photos.
-   * Returns a 512-dimensional vector.
+   * Returns a 512-dimensional vector (InsightFace).
    */
   extractEmbedding(imageBuffers: Buffer[]): Promise<number[]>;
+
+  /**
+   * Enrolls a single student's reference photos into a cloud FaceSet (Face++).
+   * Returns the cloud face_token / personId if applicable.
+   */
+  enrollStudentFace?(classId: string, imageBuffers: Buffer[]): Promise<string | null>;
 
   /**
    * Identifies an attendance check-in selfie against a class session.

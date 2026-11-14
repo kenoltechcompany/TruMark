@@ -55,8 +55,12 @@ services:
       PORT: 3000
       DATABASE_URL: "postgresql://${POSTGRES_USER:-trumark}:${POSTGRES_PASSWORD:-trumark_secret}@trumark-db:5432/${POSTGRES_DB:-trumark}?schema=public"
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      FACE_PROVIDER: ${FACE_PROVIDER:-insightface}
+      FACE_PROVIDER: ${FACE_PROVIDER:-facepp}
       FACE_SERVICE_URL: ${FACE_SERVICE_URL:-http://trumark-face-service:8000}
+      FACEPP_API_KEY: ${FACEPP_API_KEY:-}
+      FACEPP_API_SECRET: ${FACEPP_API_SECRET:-}
+      FACEPP_API_URL: ${FACEPP_API_URL:-https://api-us.faceplusplus.com/facepp/v3}
+      FACEPP_CONFIDENCE_THRESHOLD: ${FACEPP_CONFIDENCE_THRESHOLD:-70}
       AZURE_FACE_ENDPOINT: ${AZURE_FACE_ENDPOINT:-}
       AZURE_FACE_KEY: ${AZURE_FACE_KEY:-}
     volumes:

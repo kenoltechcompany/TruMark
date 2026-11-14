@@ -91,19 +91,23 @@ export class CourseRepService {
       throw new BadRequestException('A student with this index number already exists.');
     }
 
-    // Extract facial embedding if using InsightFace
+    // Extract facial embedding (InsightFace) or enroll face_token (Face++)
     let faceEmbedding: number[] = [];
-    if (this.faceRecognition.providerName === 'insightface') {
-      try {
-        const buffers = imagePaths
-          .filter((p) => existsSync(p))
-          .map((p) => readFileSync(p));
-        if (buffers.length > 0) {
+    let azurePersonId: string | null = null;
+    try {
+      const buffers = imagePaths
+        .filter((p) => existsSync(p))
+        .map((p) => readFileSync(p));
+      if (buffers.length > 0) {
+        if (this.faceRecognition.providerName === 'insightface') {
+          faceEmbedding = await this.faceRecognition.extractEmbedding(buffers);
+        } else if (this.faceRecognition.providerName === 'facepp') {
+          azurePersonId = await this.faceRecognition.enrollStudentFace(rep.classId, buffers);
           faceEmbedding = await this.faceRecognition.extractEmbedding(buffers);
         }
-      } catch (err) {
-        // Fallback: created without embedding, will sync later
       }
+    } catch (err) {
+      // Fallback: created without biometrics, will sync later
     }
 
     return this.prisma.student.create({
@@ -113,6 +117,7 @@ export class CourseRepService {
         classId: rep.classId,
         imagePaths,
         faceEmbedding,
+        azurePersonId,
       },
       select: {
         id: true,

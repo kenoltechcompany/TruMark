@@ -1,5 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  Users,
+  ScanFace,
+  Clock,
+  Copy,
+  Check,
+  RefreshCw,
+  Calendar,
+  Upload,
+  UserPlus,
+} from 'lucide-react';
 import apiClient from '../../api/client';
 import DataTable from '../../components/DataTable';
 import CsvImportModal from '../../components/CsvImportModal';
@@ -32,6 +44,8 @@ export default function CourseRepDashboardPage() {
   const [showImportCsv, setShowImportCsv] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [biometricFilter, setBiometricFilter] = useState<'all' | 'ready' | 'pending'>('all');
 
   // ── Fetch class data ──
   const { data: classData, isLoading } = useQuery<MyClassData>({
@@ -69,7 +83,8 @@ export default function CourseRepDashboardPage() {
     if (classData) {
       const url = `${window.location.origin}/public/register/${classData.id}`;
       navigator.clipboard.writeText(url);
-      alert('Copied onboarding link to clipboard!');
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2500);
     }
   };
 
@@ -84,82 +99,176 @@ export default function CourseRepDashboardPage() {
   const isStudentSynced = (s: Student) =>
     Boolean(s.azurePersonId || (s.faceEmbedding && s.faceEmbedding.length > 0));
 
-  const unsyncedCount = classData.students.filter((s) => !isStudentSynced(s)).length;
+  const syncedCount = classData.students.filter((s) => isStudentSynced(s)).length;
+  const unsyncedCount = classData.students.length - syncedCount;
+  const syncProgress =
+    classData.students.length > 0
+      ? Math.round((syncedCount / classData.students.length) * 100)
+      : 0;
 
-  const filteredStudents = searchTerm.trim()
-    ? classData.students.filter(
-        (s) =>
-          s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          s.indexNumber.toLowerCase().includes(searchTerm.toLowerCase()),
-      )
-    : classData.students;
+  const displayedStudents = classData.students.filter((s) => {
+    const matchesSearch =
+      !searchTerm.trim() ||
+      s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.indexNumber.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchesSearch) return false;
+    if (biometricFilter === 'ready') return isStudentSynced(s);
+    if (biometricFilter === 'pending') return !isStudentSynced(s);
+    return true;
+  });
 
   return (
     <div className="space-y-6">
       {/* ── Class Control Panel ── */}
-      <div className="bg-white border border-[#D0D7DE] rounded-md p-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-[#1F2328]">{classData.name}</h2>
-            <p className="text-sm text-[#656D76] mt-0.5">
-              {classData.students.length} student{classData.students.length !== 1 ? 's' : ''} enrolled
-              {unsyncedCount > 0 && ` (${unsyncedCount} pending biometric sync)`}
+            <h2 className="text-xl font-bold text-[#1F2328]">{classData.name}</h2>
+            <p className="text-sm text-[#656D76] mt-1">
+              Manage student enrollment, biometric face sync, and self-registration links.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Toggle switch */}
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <span className="text-sm text-[#656D76]">Self-Registration</span>
-              <div
-                onClick={() => toggleMutation.mutate()}
-                className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Hardware Self-Registration Switch */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={classData.registrationLinkActive}
+              onClick={() => toggleMutation.mutate()}
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] hover:bg-white transition-colors cursor-pointer select-none"
+            >
+              <span className="text-xs font-semibold text-[#1F2328]">Self-Registration</span>
+              <span
+                className={`neu-switch-track relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${
                   classData.registrationLinkActive ? 'bg-[#1F883D]' : 'bg-[#D0D7DE]'
                 }`}
               >
-                <div
-                  className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
-                    classData.registrationLinkActive ? 'translate-x-5' : ''
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                    classData.registrationLinkActive ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
-              </div>
-            </label>
-            {/* Copy link button */}
-            <button
-              onClick={copyLink}
-              className="bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#F3F4F6] transition-colors"
-            >
-              Copy Student Link
+              </span>
             </button>
+
+            {/* Copy link button with inline confirmation */}
+            <button
+              type="button"
+              onClick={copyLink}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                linkCopied
+                  ? 'bg-[#E6F6EC] border-[#34D058] text-[#1F883D]'
+                  : 'bg-[#F6F8FA] border-[#D0D7DE] text-[#24292F] hover:bg-white'
+              }`}
+            >
+              {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{linkCopied ? 'Copied Link!' : 'Copy Student Link'}</span>
+            </button>
+
             {/* Sync Face Biometrics button */}
             <button
+              type="button"
               onClick={() => syncMutation.mutate()}
               disabled={syncMutation.isPending || unsyncedCount === 0}
-              className="bg-[#1F883D] text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#1A7F37] transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 bg-[#1F883D] text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold hover:bg-[#1A7F37] active:scale-[0.99] transition-all disabled:opacity-50 cursor-pointer"
             >
-              {syncMutation.isPending
-                ? 'Syncing Biometrics…'
-                : `Sync ${unsyncedCount > 0 ? `(${unsyncedCount})` : ''} Biometrics`}
+              <RefreshCw className={`w-3.5 h-3.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+              <span>
+                {syncMutation.isPending
+                  ? 'Syncing...'
+                  : `Sync Biometrics${unsyncedCount > 0 ? ` (${unsyncedCount})` : ''}`}
+              </span>
             </button>
+
+            {/* Quick jump to Sessions & QR */}
+            <Link
+              to="/course-rep-dashboard/sessions"
+              className="inline-flex items-center gap-1.5 bg-[#0969DA] text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold hover:bg-[#0353A4] transition-colors"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Sessions &amp; QR</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Tactile Summary Gauges ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="neu-raised neu-raised--press p-4 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#656D76]">
+              Enrolled Students
+            </div>
+            <div className="text-2xl font-bold text-[#1F2328] mt-0.5">
+              {classData.students.length}
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-white border border-[#D0D7DE] flex items-center justify-center text-[#0969DA]">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="neu-raised neu-raised--press p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-[#656D76]">
+                Face Models Ready
+              </div>
+              <div className="text-2xl font-bold text-[#1F883D] mt-0.5">
+                {syncedCount} <span className="text-xs font-medium text-[#656D76]">({syncProgress}%)</span>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-white border border-[#D0D7DE] flex items-center justify-center text-[#1F883D]">
+              <ScanFace className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-2.5 h-1.5 w-full neu-inset rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#1F883D] rounded-full transition-all duration-500"
+              style={{ width: `${syncProgress}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="neu-raised neu-raised--press p-4 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#656D76]">
+              Pending Sync
+            </div>
+            <div className="text-2xl font-bold text-[#1F2328] mt-0.5">{unsyncedCount}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-white border border-[#D0D7DE] flex items-center justify-center text-[#9A6700]">
+            <Clock className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* ── Roster Management ── */}
-      <div className="bg-white border border-[#D0D7DE] rounded-md p-4">
+      <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <h3 className="text-base font-semibold text-[#1F2328]">Enrolled Students</h3>
+          <div>
+            <h3 className="text-base font-semibold text-[#1F2328]">Enrolled Students</h3>
+            <p className="text-xs text-[#656D76]">
+              Filter by biometric readiness or manage individual student profiles.
+            </p>
+          </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setShowImportCsv(true)}
-              className="bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#F3F4F6] transition-colors"
+              className="inline-flex items-center gap-1.5 bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-white transition-colors cursor-pointer"
             >
-              Import CSV
+              <Upload className="w-3.5 h-3.5" />
+              <span>Import CSV</span>
             </button>
             <button
+              type="button"
               onClick={() => setShowModal(true)}
-              className="bg-[#0969DA] text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#0353A4] transition-colors"
+              className="inline-flex items-center gap-1.5 bg-[#0969DA] text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold hover:bg-[#0353A4] active:scale-[0.99] transition-all cursor-pointer"
             >
-              + Add Student
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Add Student</span>
             </button>
           </div>
         </div>
@@ -235,7 +344,38 @@ export default function CourseRepDashboardPage() {
               ),
             },
           ]}
-          data={classData.students}
+          data={displayedStudents}
+          filterSlot={
+            <div role="tablist" aria-label="Biometric status filter" className="neu-track gap-1 text-xs">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={biometricFilter === 'all'}
+                onClick={() => setBiometricFilter('all')}
+                className={`neu-tab px-2.5 py-1 font-medium ${biometricFilter === 'all' ? 'active text-[#1F2328]' : ''}`}
+              >
+                All ({classData.students.length})
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={biometricFilter === 'ready'}
+                onClick={() => setBiometricFilter('ready')}
+                className={`neu-tab px-2.5 py-1 font-medium ${biometricFilter === 'ready' ? 'active text-[#1F2328]' : ''}`}
+              >
+                Face Ready ({syncedCount})
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={biometricFilter === 'pending'}
+                onClick={() => setBiometricFilter('pending')}
+                className={`neu-tab px-2.5 py-1 font-medium ${biometricFilter === 'pending' ? 'active text-[#1F2328]' : ''}`}
+              >
+                Pending ({unsyncedCount})
+              </button>
+            </div>
+          }
           keyExtractor={(s) => s.id}
           bulkActionLabel="Delete Selected"
           onBulkAction={(ids) => {

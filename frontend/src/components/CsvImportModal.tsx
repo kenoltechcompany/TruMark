@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Upload, Download, FileSpreadsheet, X, CheckCircle2 } from 'lucide-react';
 import apiClient from '../api/client';
 
 interface CsvRow {
@@ -8,9 +9,9 @@ interface CsvRow {
 
 interface CsvImportModalProps {
   title?: string;
-  classId?: string; // If undefined, modal displays a class selection dropdown
+  classId?: string;
   classes?: Array<{ id: string; name: string }>;
-  apiEndpoint: string; // e.g. '/admins/students/import-csv' or '/course-rep/my-class/students/import-csv'
+  apiEndpoint: string;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -53,7 +54,6 @@ export default function CsvImportModal({
           throw new Error('CSV must contain a header row and at least one student row.');
         }
 
-        // Parse header
         const rawHeaders = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/['"]/g, ''));
         let nameIdx = rawHeaders.findIndex((h) =>
           ['fullname', 'full_name', 'name', 'student_name', 'studentname'].includes(h),
@@ -62,7 +62,6 @@ export default function CsvImportModal({
           ['indexnumber', 'index_number', 'index', 'id', 'student_id', 'studentid', 'roll_no'].includes(h),
         );
 
-        // Fallback: if header not explicitly recognized, default col 0 to name, col 1 to index
         if (nameIdx === -1 && indexIdx === -1 && rawHeaders.length >= 2) {
           nameIdx = 0;
           indexIdx = 1;
@@ -74,7 +73,6 @@ export default function CsvImportModal({
 
         const rows: CsvRow[] = [];
         for (let i = 1; i < lines.length; i++) {
-          // basic csv split respecting unescaped commas
           const parts = lines[i].split(',').map((p) => p.trim().replace(/^["']|["']$/g, ''));
           const fullName = parts[nameIdx] || '';
           const indexNumber = parts[indexIdx] || '';
@@ -98,7 +96,8 @@ export default function CsvImportModal({
   };
 
   const handleDownloadTemplate = () => {
-    const csvContent = 'data:text/csv;charset=utf-8,fullName,indexNumber\nKwame Mensah,10293847\nAbena Osei,10293848\nKofi Boateng,10293849';
+    const csvContent =
+      'data:text/csv;charset=utf-8,fullName,indexNumber\nKwame Mensah,10293847\nAbena Osei,10293848\nKofi Boateng,10293849';
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
@@ -129,7 +128,7 @@ export default function CsvImportModal({
       }
 
       const res = await apiClient.post(apiEndpoint, payload);
-      const { importedCount, duplicatesSkipped, errors = [] } = res.data;
+      const { importedCount, duplicatesSkipped } = res.data;
 
       setResultMessage(
         `Successfully imported ${importedCount} student(s). ${
@@ -149,38 +148,48 @@ export default function CsvImportModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white border border-[#D0D7DE] rounded-md shadow-lg p-6 w-full max-w-lg">
+      <div className="bg-white border border-[#D0D7DE] rounded-xl shadow-lg p-6 w-full max-w-lg animate-enter">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-[#1F2328]">{title}</h3>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg neu-raised flex items-center justify-center text-[#0969DA]">
+              <FileSpreadsheet className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[#1F2328]">{title}</h3>
+              <p className="text-xs text-[#656D76]">Bulk enroll student roster from spreadsheet</p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="text-[#656D76] hover:text-[#1F2328] text-xl leading-none"
+            className="text-[#656D76] hover:text-[#1F2328] p-1 rounded-md hover:bg-[#F6F8FA] cursor-pointer"
           >
-            &times;
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {error && (
-          <div className="bg-[#FFEBE9] border border-[#FF8182] text-[#D73A49] px-3 py-2 rounded-md text-xs mb-3">
+          <div className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] px-3 py-2 rounded-lg text-xs mb-3">
             {error}
           </div>
         )}
 
         {resultMessage && (
-          <div className="bg-[#E6FFED] border border-[#34D058] text-[#1F883D] px-3 py-2 rounded-md text-xs mb-3 font-medium">
-            {resultMessage}
+          <div className="bg-[#E6F6EC] border border-[#34D058] text-[#1F883D] px-3 py-2 rounded-lg text-xs mb-3 font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{resultMessage}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Target class picker if not fixed */}
           {!fixedClassId && (
             <div>
-              <label className="block text-xs font-medium text-[#656D76] mb-1">Target Class</label>
+              <label className="block text-xs font-semibold text-[#1F2328] mb-1">
+                Target Class Cohort
+              </label>
               <select
                 value={selectedClassId}
                 onChange={(e) => setSelectedClassId(e.target.value)}
-                className="border border-[#D0D7DE] rounded-md px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA] shadow-sm"
+                className="border border-[#D0D7DE] rounded-lg px-3.5 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA]"
                 required
               >
                 {classes.map((c) => (
@@ -192,37 +201,36 @@ export default function CsvImportModal({
             </div>
           )}
 
-          {/* File input and sample download */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-medium text-[#656D76]">CSV File</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-[#1F2328]">CSV File</label>
               <button
                 type="button"
                 onClick={handleDownloadTemplate}
-                className="text-xs text-[#0969DA] hover:underline"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0969DA] hover:underline cursor-pointer"
               >
-                Download CSV Sample Template
+                <Download className="w-3 h-3" />
+                <span>Download Sample Template</span>
               </button>
             </div>
             <input
               type="file"
               accept=".csv,text/csv"
               onChange={handleFileUpload}
-              className="border border-[#D0D7DE] rounded-md px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA] file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-[#F6F8FA] file:text-[#1F2328] hover:file:bg-[#F3F4F6] cursor-pointer"
+              className="border border-[#D0D7DE] rounded-lg px-3 py-2 text-xs w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA] file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border file:border-[#D0D7DE] file:text-xs file:font-semibold file:bg-[#F6F8FA] file:text-[#1F2328] hover:file:bg-[#EAEEF2] cursor-pointer"
             />
             <p className="text-[11px] text-[#656D76] mt-1">
-              File must have <code>fullName</code> and <code>indexNumber</code> columns.
+              Required columns: <code>fullName</code> and <code>indexNumber</code>.
             </p>
           </div>
 
-          {/* Parsed Preview */}
           {parsedRows.length > 0 && (
-            <div className="border border-[#D0D7DE] rounded-md p-3 bg-[#F6F8FA] max-h-48 overflow-y-auto">
+            <div className="border border-[#D0D7DE] rounded-xl p-3.5 bg-[#F6F8FA] max-h-48 overflow-y-auto">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-semibold text-[#1F2328]">
+                <span className="text-xs font-bold text-[#1F2328]">
                   Detected {parsedRows.length} Student{parsedRows.length !== 1 ? 's' : ''} ({fileName})
                 </span>
-                <span className="text-[11px] text-[#656D76]">Showing top 5</span>
+                <span className="text-[11px] text-[#656D76]">Previewing top 5</span>
               </div>
               <table className="w-full text-xs text-left">
                 <thead>
@@ -237,7 +245,7 @@ export default function CsvImportModal({
                     <tr key={i} className="border-b border-[#E1E4E8] last:border-0">
                       <td className="py-1 text-[#656D76]">{i + 1}</td>
                       <td className="py-1 font-medium text-[#1F2328]">{r.fullName}</td>
-                      <td className="py-1 text-[#656D76]">{r.indexNumber}</td>
+                      <td className="py-1 font-mono text-[#656D76]">{r.indexNumber}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -245,20 +253,25 @@ export default function CsvImportModal({
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-3 border-t border-[#E1E4E8]">
             <button
               type="button"
               onClick={onClose}
-              className="bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#F3F4F6] transition-colors"
+              className="bg-[#F6F8FA] border border-[#D0D7DE] text-[#1F2328] px-4 py-2 rounded-lg text-xs font-semibold hover:bg-[#EAEEF2] transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting || parsedRows.length === 0}
-              className="bg-[#0969DA] text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#0353A4] transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 bg-[#0969DA] text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-[#0353A4] transition-colors disabled:opacity-50 cursor-pointer"
             >
-              {isSubmitting ? 'Importing…' : `Import ${parsedRows.length > 0 ? `(${parsedRows.length})` : ''} Students`}
+              <Upload className="w-3.5 h-3.5" />
+              <span>
+                {isSubmitting
+                  ? 'Importing...'
+                  : `Import ${parsedRows.length > 0 ? `(${parsedRows.length})` : ''} Students`}
+              </span>
             </button>
           </div>
         </form>

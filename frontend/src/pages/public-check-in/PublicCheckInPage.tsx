@@ -1,5 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import {
+  QrCode,
+  MapPin,
+  Camera,
+  CheckCircle2,
+  ShieldCheck,
+  ArrowRight,
+  ArrowLeft,
+  Clock,
+  AlertCircle,
+  RefreshCw,
+  Zap,
+  Hash,
+  Crosshair,
+  Sparkles,
+} from 'lucide-react';
 import apiClient from '../../api/client';
 
 interface SessionData {
@@ -121,7 +137,7 @@ export default function PublicCheckInPage() {
       (err) => {
         setLocationStatus('denied');
         if (err.code === err.PERMISSION_DENIED) {
-          setLocationError('Location permission denied. Please enable location access in browser settings.');
+          setLocationError('Location permission denied. Enable GPS access in browser settings.');
         } else {
           setLocationError(`Failed to get location: ${err.message}`);
         }
@@ -153,7 +169,7 @@ export default function PublicCheckInPage() {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(() => {});
       }
-    } catch (err: any) {
+    } catch {
       setCameraStatus('denied');
       setCameraError('Camera access denied or unavailable. Please grant webcam permissions.');
     }
@@ -303,365 +319,628 @@ export default function PublicCheckInPage() {
     }
   };
 
+  const isActiveSessionView = Boolean(session && !checkInResult);
+
   return (
-    <div className="min-h-screen bg-[#F6F8FA] flex flex-col justify-between text-[#1F2328]">
-      {/* Top Header */}
-      <header className="bg-white border-b border-[#D0D7DE] py-3.5 px-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-[#0969DA] flex items-center justify-center text-white font-bold text-sm shadow-sm">
-            TM
+    <div className="min-h-screen neu-surface flex flex-col justify-between text-[#1F2328] font-sans">
+      {/* ── Top Header ── */}
+      <header className="bg-white border-b border-[#D0D7DE] py-3 px-4 sm:px-6 sticky top-0 z-30">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <img
+              src="/logo-nav.png"
+              alt="TruMark Class Attendance System"
+              className="h-8 sm:h-9 w-auto object-contain transition-transform group-hover:scale-[1.02]"
+            />
+          </Link>
+
+          <div className="flex items-center gap-2.5">
+            <span className="neu-pill px-3 py-1 text-[11px] font-medium text-[#1F2328]">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#1F883D]" />
+              <span className="hidden sm:inline">Biometric &amp; GPS Portal</span>
+              <span className="sm:hidden">Live Portal</span>
+            </span>
+            <Link
+              to="/login"
+              className="text-xs font-medium text-[#656D76] hover:text-[#0969DA] transition-colors px-2 py-1"
+            >
+              Staff Login
+            </Link>
           </div>
-          <div>
-            <h1 className="text-base font-semibold leading-none text-[#1F2328]">TruMark</h1>
-            <span className="text-[11px] text-[#656D76]">Web Attendance Check-In</span>
-          </div>
-        </div>
-        <div className="text-xs text-[#656D76]">
-          Secure Attendance Portal
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-2xl w-full mx-auto p-4 sm:p-6 my-auto">
-        {/* If no session loaded, show Session ID input */}
+      {/* ── Main Content Area ── */}
+      <main
+        className={`w-full mx-auto px-4 py-6 sm:px-6 my-auto ${
+          isActiveSessionView ? 'max-w-5xl' : 'max-w-2xl'
+        }`}
+      >
+        {/* 1. Session Lookup View */}
         {!session && !isLoadingSession && (
-          <div className="bg-white border border-[#D0D7DE] rounded-xl p-6 sm:p-8 shadow-sm">
-            <h2 className="text-lg font-bold text-[#1F2328] mb-1">Enter Session ID</h2>
-            <p className="text-xs text-[#656D76] mb-5">
-              Paste the Session ID or scan the QR code displayed on your lecturer or course rep's screen.
-            </p>
-
-            {sessionError && (
-              <div className="bg-[#FFEBE9] border border-[#FF8182] text-[#D73A49] px-3.5 py-2.5 rounded-md text-xs mb-4">
-                {sessionError}
+          <div className="space-y-6 animate-enter">
+            {/* Tactile Medallion Header */}
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 neu-raised neu-raised--press flex items-center justify-center text-[#0969DA] mb-4">
+                <QrCode className="w-7 h-7" />
               </div>
-            )}
+              <span className="border-l-2 border-[#0969DA] pl-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#656D76]">
+                Student Check-In
+              </span>
+              <h2 className="text-2xl font-bold text-[#1F2328] mt-1.5">
+                Join Active Class Session
+              </h2>
+              <p className="text-xs sm:text-sm text-[#656D76] mt-1 max-w-md">
+                Enter the Session ID displayed on your lecturer&apos;s screen or scan the session QR code to begin verification.
+              </p>
+            </div>
 
-            <form onSubmit={handleManualSessionLookup} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-[#656D76] mb-1.5">Session ID / Token</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 736af390-fe05-47e2-b600-47d76b1e5e99"
-                  value={inputSessionId}
-                  onChange={(e) => setInputSessionId(e.target.value)}
-                  className="w-full border border-[#D0D7DE] rounded-md px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0969DA]"
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full bg-[#0969DA] text-white py-2 px-4 rounded-md text-sm font-semibold hover:bg-[#0353A4] transition-colors"
-              >
-                Find Session
-              </button>
-            </form>
-          </div>
-        )}
+            {/* Minimalist Lookup Card */}
+            <div className="bg-white border border-[#D0D7DE] rounded-xl p-6 shadow-xs">
+              {sessionError && (
+                <div
+                  role="alert"
+                  className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] px-3.5 py-2.5 rounded-lg text-xs font-medium mb-4 flex items-center gap-2 animate-enter"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{sessionError}</span>
+                </div>
+              )}
 
-        {isLoadingSession && (
-          <div className="bg-white border border-[#D0D7DE] rounded-xl p-10 text-center shadow-sm">
-            <div className="inline-block animate-spin w-8 h-8 border-4 border-[#0969DA] border-t-transparent rounded-full mb-3" />
-            <p className="text-sm font-medium text-[#656D76]">Loading session details...</p>
-          </div>
-        )}
-
-        {/* Active Session Card */}
-        {session && !checkInResult && (
-          <div className="space-y-4">
-            {/* Session Info Banner */}
-            <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E1E4E8] pb-3 mb-3">
+              <form onSubmit={handleManualSessionLookup} className="space-y-4">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-[#1F2328]">{session.name}</h2>
-                    <span
-                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                        session.isActive
-                          ? 'bg-[#E6FFED] text-[#1F883D] border border-[#34D058]'
-                          : 'bg-[#FFEBE9] text-[#CF222E] border border-[#FF8182]'
-                      }`}
-                    >
-                      {session.isActive ? '● Live Session' : 'Inactive / Closed'}
+                  <label
+                    htmlFor="session-id-input"
+                    className="block text-xs font-semibold text-[#1F2328] mb-1.5"
+                  >
+                    Session ID / Token
+                  </label>
+                  <div className="relative">
+                    <Hash className="w-4 h-4 text-[#656D76] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="session-id-input"
+                      type="text"
+                      placeholder="e.g. bfea1f11-5d9f-48f3-9a00-5c63feca4531"
+                      value={inputSessionId}
+                      onChange={(e) => setInputSessionId(e.target.value)}
+                      className="w-full bg-white border border-[#D0D7DE] rounded-lg pl-9 pr-3.5 py-2.5 text-sm text-[#1F2328] placeholder:text-[#656D76]/60 focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:border-[#0969DA] transition-shadow"
+                      required
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-[#0969DA] hover:bg-[#0353A4] active:scale-[0.99] text-white py-2.5 px-4 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Find Session</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
+
+            {/* 3-Step Verification Preview Strip */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-enter-delay-1">
+              <div className="neu-raised neu-raised--press p-3.5 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-white border border-[#D0D7DE] flex items-center justify-center text-[#0969DA] shrink-0">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-[#1F2328]">GPS Geofence</div>
+                  <div className="text-[11px] text-[#656D76]">Classroom proximity</div>
+                </div>
+              </div>
+
+              <div className="neu-raised neu-raised--press p-3.5 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-white border border-[#D0D7DE] flex items-center justify-center text-[#0969DA] shrink-0">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-[#1F2328]">Live Selfie</div>
+                  <div className="text-[11px] text-[#656D76]">Face++ biometric match</div>
+                </div>
+              </div>
+
+              <div className="neu-raised neu-raised--press p-3.5 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-white border border-[#D0D7DE] flex items-center justify-center text-[#1F883D] shrink-0">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-[#1F2328]">Instant Record</div>
+                  <div className="text-[11px] text-[#656D76]">Verified in &lt; 2s</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 2. Loading Session */}
+        {isLoadingSession && (
+          <div className="bg-white border border-[#D0D7DE] rounded-xl p-12 text-center shadow-xs animate-enter">
+            <div className="inline-flex items-center justify-center w-12 h-12 neu-raised mb-4">
+              <RefreshCw className="w-5 h-5 text-[#0969DA] animate-spin" />
+            </div>
+            <p className="text-sm font-semibold text-[#1F2328]">Connecting to Session...</p>
+            <p className="text-xs text-[#656D76] mt-1">Fetching classroom boundaries and verification rules</p>
+          </div>
+        )}
+
+        {/* 3. Active Session Check-In Console (2-Column Responsive Layout) */}
+        {session && !checkInResult && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start animate-enter">
+            {/* ── Left Column: Session Context, Telemetry Gauges & Controls ── */}
+            <div className="lg:col-span-5 space-y-4">
+              {/* Session Header Card */}
+              <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-xs">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="border-l-2 border-[#0969DA] pl-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#656D76]">
+                      {session.className}
+                    </span>
+                    <h2 className="text-lg font-bold text-[#1F2328] mt-1 leading-snug">
+                      {session.name}
+                    </h2>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSession(null);
+                      setInputSessionId('');
+                      navigate('/check-in');
+                    }}
+                    className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-[#656D76] hover:text-[#1F2328] px-2.5 py-1.5 rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] hover:bg-white transition-colors cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3 h-3" />
+                    <span>Change</span>
+                  </button>
+                </div>
+
+                {/* Metadata & Live Status Bar */}
+                <div className="mt-4 pt-3.5 border-t border-[#E1E4E8] flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-3 text-[#656D76]">
+                    <span className="inline-flex items-center gap-1.5 font-medium text-[#1F2328]">
+                      <MapPin className="w-3.5 h-3.5 text-[#0969DA]" />
+                      {session.classroomName}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      Ends {new Date(session.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="text-xs text-[#656D76] mt-0.5">
-                    {session.className} &bull; {session.classroomName}
-                  </p>
+
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${
+                      session.isActive
+                        ? 'bg-[#E6F6EC] text-[#1F883D] border border-[#34D058]/60'
+                        : 'bg-[#FFEBE9] text-[#CF222E] border border-[#FF8182]'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        session.isActive ? 'bg-[#1F883D] animate-pulse' : 'bg-[#CF222E]'
+                      }`}
+                    />
+                    {session.isActive ? 'Live Session' : 'Closed'}
+                  </span>
                 </div>
-                <div className="text-left sm:text-right text-xs text-[#656D76]">
-                  <div>Ends: {new Date(session.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+
+              {/* Tactile Hardware Telemetry Gauges */}
+              <div className="space-y-3">
+                {/* 1. GPS Geofence Tactile Tile */}
+                <div className="neu-raised p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-9 h-9 rounded-lg bg-white border flex items-center justify-center shrink-0 ${
+                          !isGeofenceActive || (locationStatus === 'ready' && isWithinGeofence)
+                            ? 'border-[#34D058] text-[#1F883D]'
+                            : locationStatus === 'ready' && !isWithinGeofence
+                            ? 'border-[#FF8182] text-[#CF222E]'
+                            : 'border-[#D0D7DE] text-[#0969DA]'
+                        }`}
+                      >
+                        <MapPin className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-[#1F2328]">GPS Geofence</div>
+                        <div className="text-[11px] text-[#656D76]">
+                          Allowed radius: {session.classroomBoundaries.radiusMeters + 5}m
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status Badge */}
+                    {!isGeofenceActive ? (
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-white border border-[#D0D7DE] text-[#1F883D]">
+                        Bypassed
+                      </span>
+                    ) : locationStatus === 'acquiring' ? (
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#DDF4FF] text-[#0969DA] animate-pulse">
+                        Locating...
+                      </span>
+                    ) : locationStatus === 'ready' ? (
+                      <span
+                        className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${
+                          isWithinGeofence
+                            ? 'bg-[#E6F6EC] text-[#1F883D] border-[#34D058]/60'
+                            : 'bg-[#FFEBE9] text-[#CF222E] border-[#FF8182]'
+                        }`}
+                      >
+                        {isWithinGeofence ? 'In Bounds' : 'Out of Range'}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-white border border-[#D0D7DE] text-[#656D76]">
+                        Required
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Readout & Refresh Action */}
+                  <div className="mt-3 pt-2.5 border-t border-[#D0D7DE]/70 flex items-center justify-between gap-2 text-xs">
+                    <div className="text-[11px]">
+                      {!isGeofenceActive ? (
+                        <span className="text-[#656D76]">Geofencing validation is bypassed for this session.</span>
+                      ) : locationStatus === 'ready' ? (
+                        isWithinGeofence ? (
+                          <span className="text-[#1F883D] font-medium">
+                            {Math.round(distanceToClassroom ?? 0)}m from center (&plusmn;{coords?.accuracy}m)
+                          </span>
+                        ) : (
+                          <span className="text-[#CF222E] font-medium">
+                            {Math.round(distanceToClassroom ?? 0)}m away (Max {session.classroomBoundaries.radiusMeters + 5}m)
+                          </span>
+                        )
+                      ) : locationStatus === 'denied' ? (
+                        <span className="text-[#CF222E] font-medium">{locationError || 'GPS permission denied'}</span>
+                      ) : (
+                        <span className="text-[#656D76]">Waiting for browser GPS coordinates...</span>
+                      )}
+                    </div>
+
+                    {isGeofenceActive && (
+                      <button
+                        type="button"
+                        onClick={requestLocation}
+                        disabled={locationStatus === 'acquiring'}
+                        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-[#D0D7DE] text-[11px] font-semibold text-[#1F2328] hover:border-[#0969DA] hover:text-[#0969DA] transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        <Crosshair className={`w-3 h-3 ${locationStatus === 'acquiring' ? 'animate-spin' : ''}`} />
+                        <span>Refresh GPS</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Camera Biometrics Tactile Tile */}
+                <div className="neu-raised p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`w-9 h-9 rounded-lg bg-white border flex items-center justify-center shrink-0 ${
+                          !isBiometricActive || cameraStatus === 'ready'
+                            ? 'border-[#34D058] text-[#1F883D]'
+                            : cameraStatus === 'denied'
+                            ? 'border-[#FF8182] text-[#CF222E]'
+                            : 'border-[#D0D7DE] text-[#0969DA]'
+                        }`}
+                      >
+                        <Camera className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-[#1F2328]">Camera Biometrics</div>
+                        <div className="text-[11px] text-[#656D76]">
+                          Face++ live facial verification
+                        </div>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${
+                        !isBiometricActive
+                          ? 'bg-white border-[#D0D7DE] text-[#656D76]'
+                          : cameraStatus === 'ready'
+                          ? 'bg-[#E6F6EC] text-[#1F883D] border-[#34D058]/60'
+                          : cameraStatus === 'denied'
+                          ? 'bg-[#FFEBE9] text-[#CF222E] border-[#FF8182]'
+                          : 'bg-white border-[#D0D7DE] text-[#656D76]'
+                      }`}
+                    >
+                      {!isBiometricActive ? 'Optional' : cameraStatus === 'ready' ? 'Ready' : 'Required'}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-[#D0D7DE]/70 flex items-center justify-between gap-2 text-[11px]">
+                    <div>
+                      {!isBiometricActive ? (
+                        <span className="text-[#656D76]">Index number check-in active.</span>
+                      ) : cameraStatus === 'ready' ? (
+                        <span className="text-[#1F883D] font-medium">Camera stream active &amp; oval aligned</span>
+                      ) : cameraStatus === 'denied' ? (
+                        <span className="text-[#CF222E] font-medium">{cameraError}</span>
+                      ) : (
+                        <span className="text-[#656D76]">Requesting webcam stream...</span>
+                      )}
+                    </div>
+
+                    {isBiometricActive && cameraStatus !== 'ready' && (
+                      <button
+                        type="button"
+                        onClick={startCamera}
+                        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-[#D0D7DE] text-[11px] font-semibold text-[#0969DA] hover:border-[#0969DA] transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Enable</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* Informational Policy Banners */}
-              {!isBiometricActive && !isGeofenceActive && (
-                <div className="bg-[#E6F6EC] border border-[#34D058] text-[#1F883D] p-3 rounded-lg text-xs font-medium mb-3 flex items-center justify-between">
-                  <span>⚡ Flexible Mode: GPS Geofencing and Facial Biometrics are disabled by institutional policy.</span>
-                </div>
-              )}
-              {!isBiometricActive && isGeofenceActive && (
-                <div className="bg-[#E6F6EC] border border-[#34D058] text-[#1F883D] p-3 rounded-lg text-xs font-medium mb-3 flex items-center justify-between">
-                  <span>⚡ Simplified Mode: Biometric face verification is disabled. Verify with Student Index Number inside the classroom.</span>
-                </div>
-              )}
-              {isBiometricActive && !isGeofenceActive && (
-                <div className="bg-[#E6F6EC] border border-[#34D058] text-[#1F883D] p-3 rounded-lg text-xs font-medium mb-3 flex items-center justify-between">
-                  <span>⚡ Remote Verification: Classroom GPS geofencing is bypassed. Verify your attendance with selfie biometrics from any location.</span>
-                </div>
-              )}
-
-              {/* Status Indicators Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                {/* GPS Status */}
-                <div
-                  className={`border rounded-lg p-3 ${
-                    !isGeofenceActive
-                      ? 'bg-[#F6F8FA] border-[#D0D7DE] text-[#1F883D]'
-                      : locationStatus === 'ready'
-                      ? isWithinGeofence
-                        ? 'bg-[#F0FFF4] border-[#34D058] text-[#1A7F37]'
-                        : 'bg-[#FFF5F5] border-[#FF8182] text-[#CF222E]'
-                      : 'bg-[#F6F8FA] border-[#D0D7DE] text-[#656D76]'
-                  }`}
-                >
-                  <div className="font-semibold flex items-center justify-between">
-                    <span>GPS Classroom Geofence</span>
-                    {!isGeofenceActive ? (
-                      <span className="text-xs text-[#1F883D] font-medium">Bypassed</span>
-                    ) : (
-                      locationStatus === 'acquiring' && <span className="animate-pulse">Locating...</span>
+              {(!isBiometricActive || !isGeofenceActive) && (
+                <div className="bg-white border border-[#D0D7DE] rounded-xl p-3.5 text-xs flex items-start gap-2.5">
+                  <Zap className="w-4 h-4 text-[#1F883D] shrink-0 mt-0.5" />
+                  <div className="text-[#656D76]">
+                    {!isBiometricActive && !isGeofenceActive && (
+                      <span>
+                        <strong className="text-[#1F2328]">Flexible Mode:</strong> Both GPS geofencing and facial biometrics are bypassed for this session.
+                      </span>
                     )}
-                  </div>
-                  <div className="mt-1 text-[11px]">
-                    {!isGeofenceActive ? (
-                      <span className="text-[#656D76]">Geofencing validation is disabled for this session.</span>
-                    ) : locationStatus === 'ready' ? (
-                      isWithinGeofence ? (
-                        <span>
-                          ✓ Inside boundary ({Math.round(distanceToClassroom ?? 0)}m from center, &plusmn;{coords?.accuracy}m)
-                        </span>
-                      ) : (
-                        <span>
-                          ✗ {Math.round(distanceToClassroom ?? 0)}m away (Allowed: max {session.classroomBoundaries.radiusMeters + 5}m)
-                        </span>
-                      )
-                    ) : locationStatus === 'denied' ? (
-                      <span className="text-[#CF222E]">{locationError || 'GPS permission denied'}</span>
-                    ) : (
-                      <button
-                        onClick={requestLocation}
-                        className="text-[#0969DA] font-semibold hover:underline"
-                      >
-                        Enable Location Access
-                      </button>
+                    {!isBiometricActive && isGeofenceActive && (
+                      <span>
+                        <strong className="text-[#1F2328]">Simplified Mode:</strong> Verify with your Student Index Number while inside the classroom boundary.
+                      </span>
+                    )}
+                    {isBiometricActive && !isGeofenceActive && (
+                      <span>
+                        <strong className="text-[#1F2328]">Remote Verification:</strong> Classroom GPS geofencing is bypassed. Verify with a live selfie from any location.
+                      </span>
                     )}
                   </div>
                 </div>
+              )}
 
-                {/* Webcam Status */}
-                <div
-                  className={`border rounded-lg p-3 ${
-                    !isBiometricActive
-                      ? 'bg-[#F6F8FA] border-[#D0D7DE] text-[#656D76]'
-                      : cameraStatus === 'ready'
-                      ? 'bg-[#F0FFF4] border-[#34D058] text-[#1A7F37]'
-                      : 'bg-[#F6F8FA] border-[#D0D7DE] text-[#656D76]'
-                  }`}
-                >
-                  <div className="font-semibold flex items-center justify-between">
-                    <span>Webcam Biometrics</span>
-                    <span>
-                      {!isBiometricActive
-                        ? 'Optional'
-                        : cameraStatus === 'ready'
-                        ? '✓ Ready'
-                        : 'Required'}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-[11px]">
-                    {!isBiometricActive ? (
-                      <span>Index number check-in active. Selfie photo is optional.</span>
-                    ) : cameraStatus === 'ready' ? (
-                      <span>Camera active and aligned</span>
-                    ) : cameraStatus === 'denied' ? (
-                      <span className="text-[#CF222E]">{cameraError}</span>
-                    ) : (
-                      <button
-                        onClick={startCamera}
-                        className="text-[#0969DA] font-semibold hover:underline"
-                      >
-                        Enable Camera Access
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* If Biometrics is disabled, provide Student Index Number field */}
-            {!isBiometricActive && (
-              <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-sm space-y-2">
-                <label className="block text-xs font-semibold text-[#1F2328]">
-                  Student Index Number
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. 10928374"
-                  value={indexNumber}
-                  onChange={(e) => setIndexNumber(e.target.value)}
-                  className="w-full border border-[#D0D7DE] rounded-md px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0969DA] shadow-xs"
-                  required
-                />
-                <p className="text-[11px] text-[#656D76]">
-                  Enter your assigned student index number for {session.className}.
-                </p>
-              </div>
-            )}
-
-            {/* Error Message */}
-            {submitError && (
-              <div className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] p-3.5 rounded-lg text-xs font-medium">
-                {submitError}
-              </div>
-            )}
-
-            {/* Camera Viewport & Verification */}
-            <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-sm">
-              <div className="relative w-full aspect-[4/3] max-w-md mx-auto bg-black rounded-xl overflow-hidden shadow-inner flex items-center justify-center">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover transform -scale-x-100"
-                />
-                <canvas ref={canvasRef} className="hidden" />
-
-                {/* Biometric Face Alignment Overlay */}
-                {isBiometricActive && (
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                    <div
-                      className={`w-48 h-64 border-2 border-dashed rounded-full transition-colors ${
-                        !isGeofenceActive || isWithinGeofence ? 'border-[#34D058]' : 'border-[#FF8182]'
-                      }`}
-                      style={{ opacity: 0.85 }}
+              {/* Student Index Number Input (when biometrics is disabled) */}
+              {!isBiometricActive && (
+                <div className="bg-white border border-[#D0D7DE] rounded-xl p-4 shadow-xs space-y-2 animate-enter">
+                  <label className="block text-xs font-semibold text-[#1F2328]">
+                    Student Index Number
+                  </label>
+                  <div className="relative">
+                    <Hash className="w-4 h-4 text-[#656D76] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="e.g. 10928374"
+                      value={indexNumber}
+                      onChange={(e) => setIndexNumber(e.target.value)}
+                      className="w-full bg-white border border-[#D0D7DE] rounded-lg pl-9 pr-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:border-[#0969DA]"
+                      required
                     />
                   </div>
-                )}
-
-                {cameraStatus !== 'ready' && isBiometricActive && (
-                  <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center p-4 text-center text-white">
-                    <p className="text-sm mb-3">Camera is required for facial verification.</p>
-                    <button
-                      onClick={startCamera}
-                      className="bg-[#0969DA] text-white px-4 py-2 rounded-md text-xs font-semibold hover:bg-[#0353A4]"
-                    >
-                      Grant Camera Permission
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Button */}
-              <div className="mt-5 max-w-md mx-auto">
-                <button
-                  type="button"
-                  onClick={handleCaptureAndCheckIn}
-                  disabled={
-                    isSubmitting ||
-                    !session.isActive ||
-                    (isGeofenceActive && (locationStatus !== 'ready' || !isWithinGeofence)) ||
-                    (isBiometricActive ? cameraStatus !== 'ready' : !indexNumber.trim())
-                  }
-                  className="w-full bg-[#1F883D] text-white py-3 px-4 rounded-lg text-sm font-bold hover:bg-[#1A7F37] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>
-                        {isBiometricActive
-                          ? 'Verifying Biometrics...'
-                          : 'Recording Attendance...'}
-                      </span>
-                    </>
-                  ) : (
-                    <span>
-                      {isBiometricActive
-                        ? '📸 Capture & Mark Attendance'
-                        : '✓ Mark Attendance'}
-                    </span>
-                  )}
-                </button>
-
-                {isGeofenceActive && !isWithinGeofence && coords && (
-                  <p className="text-[11px] text-[#CF222E] text-center mt-2 font-medium">
-                    You must be inside {session.classroomName} to mark attendance.
+                  <p className="text-[11px] text-[#656D76]">
+                    Enter your enrolled index number for {session.className}.
                   </p>
-                )}
+                </div>
+              )}
+
+              {/* Error Alert */}
+              {submitError && (
+                <div
+                  role="alert"
+                  className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] p-3.5 rounded-xl text-xs font-medium flex items-start gap-2 animate-enter"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{submitError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* ── Right Column: Biometric Viewfinder & Tactile Shutter Dock ── */}
+            <div className="lg:col-span-7">
+              <div className="bg-white border border-[#D0D7DE] rounded-xl p-4 sm:p-5 shadow-xs">
+                {/* Top HUD Bar */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        cameraStatus === 'ready' ? 'bg-[#1F883D] animate-pulse' : 'bg-[#656D76]'
+                      }`}
+                    />
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#1F2328]">
+                      Biometric Viewfinder
+                    </span>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#656D76] bg-[#F6F8FA] border border-[#D0D7DE] px-2.5 py-0.5 rounded-md">
+                    <Sparkles className="w-3 h-3 text-[#0969DA]" />
+                    <span>Center face in oval</span>
+                  </span>
+                </div>
+
+                {/* Video Viewport */}
+                <div className="relative w-full aspect-[4/3] bg-[#0D1117] rounded-xl overflow-hidden border border-[#1F2328] flex items-center justify-center">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover transform -scale-x-100"
+                  />
+                  <canvas ref={canvasRef} className="hidden" />
+
+                  {/* Corner Viewfinder Brackets */}
+                  {isBiometricActive && cameraStatus === 'ready' && (
+                    <div className="absolute inset-4 pointer-events-none">
+                      <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-white/70 rounded-tl" />
+                      <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-white/70 rounded-tr" />
+                      <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-white/70 rounded-bl" />
+                      <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-white/70 rounded-br" />
+                    </div>
+                  )}
+
+                  {/* Biometric Face Alignment Overlay + Scan Line */}
+                  {isBiometricActive && (
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                      <div
+                        className={`relative w-44 h-60 sm:w-48 sm:h-64 border-2 border-dashed rounded-full transition-colors flex items-center justify-center overflow-hidden ${
+                          !isGeofenceActive || isWithinGeofence ? 'border-[#34D058]' : 'border-[#FF8182]'
+                        }`}
+                        style={{ opacity: 0.9 }}
+                      >
+                        {cameraStatus === 'ready' && (
+                          <div className="w-40 h-0.5 bg-[#34D058]/85 rounded-full animate-scan-line" />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {cameraStatus !== 'ready' && isBiometricActive && (
+                    <div className="absolute inset-0 bg-[#0D1117]/90 flex flex-col items-center justify-center p-6 text-center text-white">
+                      <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-3">
+                        <Camera className="w-6 h-6 text-white" />
+                      </div>
+                      <p className="text-sm font-semibold mb-1">Camera Access Required</p>
+                      <p className="text-xs text-white/70 mb-4 max-w-xs">
+                        Position your face inside the alignment guide to verify your attendance.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={startCamera}
+                        className="bg-[#0969DA] text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-[#0353A4] transition-colors cursor-pointer"
+                      >
+                        Grant Camera Permission
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tactile Neumorphic Shutter Bar */}
+                <div className="mt-4">
+                  {isBiometricActive ? (
+                    <div className="neu-surface border border-[#D0D7DE] rounded-xl p-3.5 sm:px-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <div className="text-center sm:text-left">
+                        <div className="text-xs font-bold text-[#1F2328]">
+                          {isSubmitting
+                            ? 'Matching Face Biometrics...'
+                            : isGeofenceActive && !isWithinGeofence
+                            ? 'Move Inside Classroom Boundary'
+                            : 'Ready to Verify Attendance'}
+                        </div>
+                        <div className="text-[11px] text-[#656D76] mt-0.5">
+                          {isGeofenceActive && !isWithinGeofence && coords
+                            ? `Currently ${Math.round(distanceToClassroom ?? 0)}m away from ${session.classroomName}`
+                            : 'Tap the tactile shutter button to capture & verify'}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCaptureAndCheckIn}
+                        disabled={
+                          isSubmitting ||
+                          !session.isActive ||
+                          (isGeofenceActive && (locationStatus !== 'ready' || !isWithinGeofence)) ||
+                          cameraStatus !== 'ready'
+                        }
+                        aria-label="Capture selfie and mark attendance"
+                        className="neu-shutter shrink-0"
+                      >
+                        {isSubmitting ? (
+                          <div className="w-6 h-6 border-2 border-[#0969DA] border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-[#1F883D] flex items-center justify-center text-white shadow-xs transition-transform">
+                            <Camera className="w-5 h-5" />
+                          </div>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleCaptureAndCheckIn}
+                      disabled={
+                        isSubmitting ||
+                        !session.isActive ||
+                        (isGeofenceActive && (locationStatus !== 'ready' || !isWithinGeofence)) ||
+                        !indexNumber.trim()
+                      }
+                      className="w-full bg-[#1F883D] text-white py-3 px-4 rounded-lg text-sm font-bold hover:bg-[#1A7F37] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Recording Attendance...</span>
+                        </>
+                      ) : (
+                        <span>Mark Attendance</span>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Check-In Success Flash Card */}
+        {/* 4. Check-In Success Flash Card */}
         {checkInResult && (
-          <div className="bg-white border border-[#34D058] rounded-xl p-8 text-center shadow-lg animate-in fade-in duration-300">
-            <div className="w-16 h-16 bg-[#E6FFED] border border-[#34D058] text-[#1F883D] rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
-              ✓
+          <div className="bg-white border border-[#34D058] rounded-xl p-8 text-center shadow-sm animate-enter">
+            <div className="w-16 h-16 neu-raised flex items-center justify-center text-[#1F883D] mx-auto mb-4">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h2 className="text-xl font-bold text-[#1F2328] mb-1">Attendance Verified!</h2>
+            <h2 className="text-xl font-bold text-[#1F2328] mb-1">Attendance Verified</h2>
             <p className="text-xs text-[#1F883D] font-semibold mb-6">
-              Attendance has been successfully recorded.
+              Your attendance has been recorded for {session?.name}.
             </p>
 
-            <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-lg p-5 text-left max-w-sm mx-auto mb-6 space-y-2">
-              <div className="text-xs">
-                <span className="text-[#656D76]">Student Name:</span>
-                <span className="font-bold text-[#1F2328] ml-2">{checkInResult.student.fullName}</span>
+            <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl p-5 text-left max-w-sm mx-auto mb-6 space-y-2.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-[#656D76]">Student Name</span>
+                <span className="font-bold text-[#1F2328]">{checkInResult.student.fullName}</span>
               </div>
-              <div className="text-xs">
-                <span className="text-[#656D76]">Index Number:</span>
-                <span className="font-semibold text-[#1F2328] ml-2">{checkInResult.student.indexNumber}</span>
+              <div className="flex justify-between">
+                <span className="text-[#656D76]">Index Number</span>
+                <span className="font-mono font-bold text-[#1F2328]">
+                  {checkInResult.student.indexNumber}
+                </span>
               </div>
-              {checkInResult.confidence > 0 && (
-                <div className="text-xs">
-                  <span className="text-[#656D76]">Verification Confidence:</span>
-                  <span className="font-semibold text-[#0969DA] ml-2">
-                    {Math.round(checkInResult.confidence * 100)}% match
-                  </span>
-                </div>
-              )}
-              <div className="text-xs">
-                <span className="text-[#656D76]">Timestamp:</span>
-                <span className="text-[#1F2328] ml-2">{new Date().toLocaleTimeString()}</span>
+              <div className="flex justify-between">
+                <span className="text-[#656D76]">Class</span>
+                <span className="font-medium text-[#1F2328]">{session?.className}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#656D76]">Verification Match</span>
+                <span className="font-mono text-[#1F883D] font-bold">
+                  {checkInResult.confidence >= 1
+                    ? 'Verified'
+                    : `${(checkInResult.confidence * 100).toFixed(1)}%`}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#656D76]">Timestamp</span>
+                <span className="text-[#1F2328]">{new Date().toLocaleTimeString()}</span>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <button
-                onClick={() => {
-                  setCheckInResult(null);
-                  if (isBiometricActive) startCamera();
-                }}
-                className="w-full sm:w-auto bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-4 py-2 rounded-md text-xs font-semibold hover:bg-[#F3F4F6] transition-colors"
-              >
-                Mark Another Student
-              </button>
-              <Link
-                to={`/public/register/${session?.id || ''}`}
-                className="w-full sm:w-auto bg-[#0969DA] text-white px-4 py-2 rounded-md text-xs font-semibold hover:bg-[#0353A4] transition-colors inline-block"
-              >
-                Done
-              </Link>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCheckInResult(null);
+                setSession(null);
+                setInputSessionId('');
+                navigate('/check-in');
+              }}
+              className="bg-[#0969DA] text-white px-6 py-2.5 rounded-lg text-xs font-semibold hover:bg-[#0353A4] transition-colors cursor-pointer"
+            >
+              Done
+            </button>
           </div>
         )}
       </main>
 
-      {/* Footer */}
+      {/* ── Footer ── */}
       <footer className="py-4 text-center text-xs text-[#656D76] border-t border-[#D0D7DE] bg-white">
-        TruMark Attendance System • Privacy-Compliant Verification
+        TruMark Biometric &amp; Geofenced Attendance System
       </footer>
     </div>
   );

@@ -91,12 +91,10 @@ export default function SettingsPage() {
         {/* Toggle 1: Enable Landing Page */}
         <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-xs transition-all hover:border-[#0969DA]/40">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-lg bg-[#DDF4FF] text-[#0969DA] flex items-center justify-center shrink-0 mt-0.5">
-                <Globe className="w-5 h-5" />
-              </div>
+            <div className="flex items-start gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-[#0969DA] shrink-0" />
                   <h3 className="text-base font-semibold text-[#1F2328]">
                     Public Landing Page
                   </h3>
@@ -124,7 +122,7 @@ export default function SettingsPage() {
                 aria-checked={settings.enableLandingPage}
                 disabled={mutation.isPending}
                 onClick={handleToggleLandingPage}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:ring-offset-2 ${
+                className={`neu-switch-track relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:ring-offset-2 ${
                   settings.enableLandingPage ? 'bg-[#1F883D]' : 'bg-[#D0D7DE]'
                 } ${mutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
@@ -141,12 +139,10 @@ export default function SettingsPage() {
         {/* Toggle 2: Enable Biometric Face Verification */}
         <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-xs transition-all hover:border-[#0969DA]/40">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-lg bg-[#E6F6EC] text-[#1F883D] flex items-center justify-center shrink-0 mt-0.5">
-                <ScanFace className="w-5 h-5" />
-              </div>
+            <div className="flex items-start gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
+                  <ScanFace className="w-4 h-4 text-[#1F883D] shrink-0" />
                   <h3 className="text-base font-semibold text-[#1F2328]">
                     Biometric Face Verification
                   </h3>
@@ -174,7 +170,7 @@ export default function SettingsPage() {
                 aria-checked={settings.enableBiometricValidation}
                 disabled={mutation.isPending}
                 onClick={handleToggleBiometric}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:ring-offset-2 ${
+                className={`neu-switch-track relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:ring-offset-2 ${
                   settings.enableBiometricValidation ? 'bg-[#1F883D]' : 'bg-[#D0D7DE]'
                 } ${mutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
@@ -200,12 +196,10 @@ export default function SettingsPage() {
         {/* Toggle 3: Enable Classroom GPS Geofencing */}
         <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-xs transition-all hover:border-[#0969DA]/40">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-lg bg-[#FBEFFF] text-[#8250DF] flex items-center justify-center shrink-0 mt-0.5">
-                <MapPin className="w-5 h-5" />
-              </div>
+            <div className="flex items-start gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-[#0969DA] shrink-0" />
                   <h3 className="text-base font-semibold text-[#1F2328]">
                     Classroom GPS Geofencing
                   </h3>
@@ -233,7 +227,7 @@ export default function SettingsPage() {
                 aria-checked={settings.enableGeofencing}
                 disabled={mutation.isPending}
                 onClick={handleToggleGeofencing}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:ring-offset-2 ${
+                className={`neu-switch-track relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:ring-offset-2 ${
                   settings.enableGeofencing ? 'bg-[#1F883D]' : 'bg-[#D0D7DE]'
                 } ${mutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
               >

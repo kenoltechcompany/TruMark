@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import apiClient from '../../api/client';
+import { UserCheck, BookOpen, Users, Plus, X } from 'lucide-react';
 import DataTable from '../../components/DataTable';
 
 interface ClassItem {
@@ -158,9 +159,10 @@ export default function CourseRepsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-[#1F2328]">Course Representatives</h2>
+          <h2 className="text-xl font-bold text-[#1F2328]">Course Representatives</h2>
           <p className="text-sm text-[#656D76]">
             Assign student leaders to manage attendance sessions and onboarding links for their class.
           </p>
@@ -170,27 +172,77 @@ export default function CourseRepsPage() {
             resetForm();
             setShowForm(!showForm);
           }}
-          className="bg-[#0969DA] text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-[#0353A4] transition-colors"
+          className="inline-flex items-center gap-1.5 bg-[#0969DA] text-white px-3.5 py-2 rounded-lg text-sm font-semibold hover:bg-[#0353A4] active:scale-[0.99] transition-all cursor-pointer self-start sm:self-auto"
         >
-          {showForm ? 'Cancel' : '+ Add Course Rep'}
+          {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          <span>{showForm ? 'Cancel' : 'Add Course Rep'}</span>
         </button>
       </div>
 
+      {/* Tactile Summary Gauges */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="neu-raised neu-raised--press p-4 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#656D76]">
+              Active Course Reps
+            </div>
+            <div className="text-2xl font-bold text-[#1F2328] mt-0.5">{reps.length}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-white border border-[#D0D7DE] flex items-center justify-center text-[#0969DA]">
+            <UserCheck className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="neu-raised neu-raised--press p-4 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#656D76]">
+              Academic Classes
+            </div>
+            <div className="text-2xl font-bold text-[#1F2328] mt-0.5">{classes.length}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-white border border-[#D0D7DE] flex items-center justify-center text-[#1F883D]">
+            <BookOpen className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="neu-raised neu-raised--press p-4 flex items-center justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#656D76]">
+              Total Students
+            </div>
+            <div className="text-2xl font-bold text-[#1F2328] mt-0.5">{allStudents.length}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-white border border-[#D0D7DE] flex items-center justify-center text-[#1F2328]">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
       {showForm && (
-        <div className="bg-white border border-[#D0D7DE] rounded-md p-4 max-w-xl">
-          <div className="flex border-b border-[#D0D7DE] mb-4 gap-4 text-sm">
+        <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 max-w-xl shadow-xs animate-enter">
+          <div
+            role="tablist"
+            aria-label="Course rep creation mode"
+            className="neu-track mb-4 gap-1 text-xs sm:text-sm"
+          >
             <button
+              type="button"
+              role="tab"
+              aria-selected={createMode === 'promote'}
               onClick={() => { setCreateMode('promote'); setError(''); }}
-              className={`pb-2 font-medium border-b-2 transition-colors ${
-                createMode === 'promote' ? 'border-[#0969DA] text-[#0969DA]' : 'border-transparent text-[#656D76]'
+              className={`neu-tab px-3.5 py-1.5 font-medium ${
+                createMode === 'promote' ? 'active text-[#1F2328]' : ''
               }`}
             >
               Promote Enrolled Student
             </button>
             <button
+              type="button"
+              role="tab"
+              aria-selected={createMode === 'new'}
               onClick={() => { setCreateMode('new'); setError(''); }}
-              className={`pb-2 font-medium border-b-2 transition-colors ${
-                createMode === 'new' ? 'border-[#0969DA] text-[#0969DA]' : 'border-transparent text-[#656D76]'
+              className={`neu-tab px-3.5 py-1.5 font-medium ${
+                createMode === 'new' ? 'active text-[#1F2328]' : ''
               }`}
             >
               Create New Rep Profile
