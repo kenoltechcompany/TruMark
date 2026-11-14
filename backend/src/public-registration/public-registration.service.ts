@@ -50,9 +50,6 @@ export class PublicRegistrationService {
     const existing = await this.prisma.student.findUnique({
       where: { indexNumber: data.indexNumber },
     });
-    if (existing) {
-      throw new BadRequestException('A student with this index number already exists in the system.');
-    }
 
     // Extract facial embedding (InsightFace) or enroll face_token (Face++)
     let faceEmbedding: number[] = [];
@@ -80,6 +77,25 @@ export class PublicRegistrationService {
       }
     } catch (err: any) {
       this.logger.warn(`Could not process facial biometrics during registration: ${err.message}`);
+    }
+
+    if (existing) {
+      return this.prisma.student.update({
+        where: { id: existing.id },
+        data: {
+          fullName: data.fullName,
+          classId,
+          imagePaths: persistedImagePaths,
+          faceEmbedding,
+          azurePersonId,
+        },
+        select: {
+          id: true,
+          fullName: true,
+          indexNumber: true,
+          createdAt: true,
+        },
+      });
     }
 
     return this.prisma.student.create({
@@ -165,16 +181,31 @@ export class PublicRegistrationService {
    * Returns session details with an isActive flag computed dynamically
    * by checking if the current server time falls between startTime and endTime.
    */
-  async getSession(sessionId: string) {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      include: {
-        class: { select: { name: true } },
-        classroom: {
-          select: { name: true, gpsLatitude: true, gpsLongitude: true, radiusMeters: true },
+  private async resolveSession(sessionIdOrName: string) {
+    const clean = sessionIdOrName.trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean);
+    if (isUuid) {
+      const byId = await this.prisma.session.findUnique({
+        where: { id: clean },
+        include: {
+          class: { select: { id: true, name: true } },
+          classroom: true,
         },
+      });
+      if (byId) return byId;
+    }
+    return this.prisma.session.findFirst({
+      where: { name: { contains: clean, mode: 'insensitive' } },
+      orderBy: { startTime: 'desc' },
+      include: {
+        class: { select: { id: true, name: true } },
+        classroom: true,
       },
     });
+  }
+
+  async getSession(sessionId: string) {
+    const session = await this.resolveSession(sessionId);
     if (!session) throw new NotFoundException('Session not found.');
 
     const settings = await this.getPublicSettings();
@@ -248,14 +279,8 @@ export class PublicRegistrationService {
       typeof optionsOrLat === 'number'
         ? { latitude: optionsOrLat, longitude, imageBuffer }
         : optionsOrLat;
-    // Fetch session with class + classroom
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      include: {
-        class: { select: { id: true, name: true } },
-        classroom: true,
-      },
-    });
+    // Fetch session with class + classroom (supports UUID or session name)
+    const session = await this.resolveSession(sessionId);
     if (!session) throw new NotFoundException('Session not found.');
 
     if (session.isLocked) {
@@ -430,7 +455,7 @@ export class PublicRegistrationService {
 
     // 4. Prevent duplicate check-in
     const existing = await this.prisma.attendanceRecord.findUnique({
-      where: { studentId_sessionId: { studentId: student.id, sessionId } },
+      where: { studentId_sessionId: { studentId: student.id, sessionId: session.id } },
     });
     if (existing) {
       throw new BadRequestException('You have already checked in to this session.');
@@ -440,7 +465,7 @@ export class PublicRegistrationService {
     await this.prisma.attendanceRecord.create({
       data: {
         studentId: student.id,
-        sessionId,
+        sessionId: session.id,
         confidence,
       },
     });

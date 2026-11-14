@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   User,
   Hash,
@@ -26,7 +26,10 @@ export default function PublicRegistrationPage() {
   const [error, setError] = useState('');
   const [capturedImages, setCapturedImages] = useState<Blob[]>([]);
   const [currentCapture, setCurrentCapture] = useState(0);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -49,13 +52,14 @@ export default function PublicRegistrationPage() {
     retry: false,
   });
 
-  // Ensure camera stream is attached when biometrics step mounts
-  useEffect(() => {
-    if (step === 'biometrics' && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch(() => {});
+  // Callback ref that immediately binds the MediaStream as soon as the <video> element mounts
+  const attachVideoRef = useCallback((node: HTMLVideoElement | null) => {
+    videoRef.current = node;
+    if (node && streamRef.current) {
+      node.srcObject = streamRef.current;
+      node.play().catch(() => {});
     }
-  }, [step]);
+  }, []);
 
   // Clean up camera stream on unmount
   useEffect(() => {
@@ -65,6 +69,57 @@ export default function PublicRegistrationPage() {
         streamRef.current = null;
       }
     };
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setCameraReady(false);
+  }, []);
+
+  // ── Camera controls (Progressive fallback for laptops/phones & busy webcams) ──
+  const startCamera = useCallback(async () => {
+    setError('');
+    setStep('biometrics');
+    setIsStartingCamera(true);
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+
+    try {
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        });
+      } catch {
+        // Fallback to any available video camera if ideal constraints fail
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
+
+      streamRef.current = stream;
+      setCameraReady(true);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+    } catch (err: any) {
+      setCameraReady(false);
+      if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
+        setError(
+          'Your camera is currently in use by another tab or app. Close any other TruMark check-in tab and tap "Retry Camera".',
+        );
+      } else {
+        setError('Could not access camera. Please allow camera permissions and tap "Retry Camera".');
+      }
+    } finally {
+      setIsStartingCamera(false);
+    }
   }, []);
 
   // ── Submit registration ──
@@ -81,12 +136,19 @@ export default function PublicRegistrationPage() {
         formData,
         {
           headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 30000,
         },
       );
     },
-    onSuccess: () => setStep('done'),
+    onSuccess: () => {
+      stopCamera();
+      setStep('done');
+    },
     onError: (err: any) => {
-      setError(err.response?.data?.message || 'Registration failed. Ensure your face is clearly visible.');
+      setError(
+        err.response?.data?.message ||
+          'Registration failed. Ensure your face is clearly visible.',
+      );
       setStep('biometrics');
       setCapturedImages([]);
       setCurrentCapture(0);
@@ -94,24 +156,10 @@ export default function PublicRegistrationPage() {
     },
   });
 
-  // ── Camera controls ──
-  const startCamera = async () => {
-    try {
-      setError('');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-      });
-      streamRef.current = stream;
-      setStep('biometrics');
-    } catch {
-      setError('Could not access camera. Please grant webcam permissions in your browser.');
-    }
-  };
-
   const snapPhoto = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    if (!video || !canvas || !cameraReady) return;
 
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
@@ -135,13 +183,6 @@ export default function PublicRegistrationPage() {
       'image/jpeg',
       0.9,
     );
-  };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
   };
 
   const prompts = [
@@ -289,10 +330,21 @@ export default function PublicRegistrationPage() {
               {error && (
                 <div
                   role="alert"
-                  className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] text-xs p-3 rounded-lg mb-4 flex items-center gap-2 animate-enter"
+                  className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] text-xs p-3 rounded-lg mb-4 flex items-center justify-between gap-2 animate-enter"
                 >
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{error}</span>
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                  {step === 'biometrics' && (
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      className="shrink-0 bg-white border border-[#FF8182] text-[#CF222E] px-2.5 py-1 rounded-md text-[11px] font-semibold hover:bg-[#FFEBE9] cursor-pointer"
+                    >
+                      Retry Camera
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -366,12 +418,12 @@ export default function PublicRegistrationPage() {
                         </div>
                       </div>
                     </div>
-</div>
+                  </div>
 
                   {/* Camera Viewfinder (Portrait 3:4 on mobile, 4:3 on tablet/desktop) */}
                   <div className="relative aspect-[3/4] sm:aspect-[4/3] max-h-[55vh] sm:max-h-none bg-[#0D1117] rounded-xl overflow-hidden border border-[#1F2328] flex items-center justify-center">
                     <video
-                      ref={videoRef}
+                      ref={attachVideoRef}
                       autoPlay
                       playsInline
                       muted
@@ -390,9 +442,41 @@ export default function PublicRegistrationPage() {
                     {/* Alignment Oval + Scan Line */}
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                       <div className="relative w-40 h-52 sm:w-44 sm:h-60 border-2 border-dashed border-[#34D058] rounded-full flex items-center justify-center overflow-hidden">
-                        <div className="w-36 h-0.5 bg-[#34D058]/85 rounded-full animate-scan-line" />
+                        {cameraReady && (
+                          <div className="w-36 h-0.5 bg-[#34D058]/85 rounded-full animate-scan-line" />
+                        )}
                       </div>
                     </div>
+
+                    {/* Overlay if camera stream is initializing or blocked */}
+                    {!cameraReady && (
+                      <div className="absolute inset-0 bg-[#0D1117]/90 flex flex-col items-center justify-center p-6 text-center text-white">
+                        <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-3">
+                          {isStartingCamera ? (
+                            <RefreshCw className="w-6 h-6 text-white animate-spin" />
+                          ) : (
+                            <Camera className="w-6 h-6 text-white" />
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold mb-1">
+                          {isStartingCamera ? 'Starting Camera...' : 'Camera Preview Not Active'}
+                        </p>
+                        <p className="text-xs text-white/70 mb-4 max-w-xs">
+                          {isStartingCamera
+                            ? 'Connecting to your device camera...'
+                            : 'Make sure no other browser tab is using your camera, then tap below.'}
+                        </p>
+                        {!isStartingCamera && (
+                          <button
+                            type="button"
+                            onClick={startCamera}
+                            className="bg-[#0969DA] text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-[#0353A4] transition-colors cursor-pointer"
+                          >
+                            Enable / Retry Camera
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Tactile Shutter Bar */}
@@ -427,7 +511,7 @@ export default function PublicRegistrationPage() {
                     <button
                       type="button"
                       onClick={snapPhoto}
-                      disabled={submitMutation.isPending}
+                      disabled={submitMutation.isPending || !cameraReady}
                       aria-label={`Capture photo ${currentCapture + 1} of 3`}
                       className="neu-shutter shrink-0"
                     >
