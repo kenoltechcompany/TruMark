@@ -14,7 +14,6 @@ import {
   Zap,
   Hash,
   Crosshair,
-  Sparkles,
 } from 'lucide-react';
 import apiClient from '../../api/client';
 
@@ -596,8 +595,7 @@ export default function PublicCheckInPage() {
                     </span>
                   </div>
                   <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#656D76] bg-[#F6F8FA] border border-[#D0D7DE] px-2.5 py-0.5 rounded-md">
-                    <Sparkles className="w-3 h-3 text-[#0969DA]" />
-                    <span>Center face in oval</span>
+<span>Center face in oval</span>
                   </span>
                 </div>
 

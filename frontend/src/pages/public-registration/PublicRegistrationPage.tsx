@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   RefreshCw,
   Lock,
-  Sparkles,
 } from 'lucide-react';
 import apiClient from '../../api/client';
 
@@ -367,8 +366,7 @@ export default function PublicRegistrationPage() {
                         </div>
                       </div>
                     </div>
-                    <Sparkles className="w-4 h-4 text-[#0969DA] shrink-0" />
-                  </div>
+</div>
 
                   {/* Camera Viewfinder (Portrait 3:4 on mobile, 4:3 on tablet/desktop) */}
                   <div className="relative aspect-[3/4] sm:aspect-[4/3] max-h-[55vh] sm:max-h-none bg-[#0D1117] rounded-xl overflow-hidden border border-[#1F2328] flex items-center justify-center">
