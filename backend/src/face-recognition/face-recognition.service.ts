@@ -18,17 +18,18 @@ export class FaceRecognitionService implements IFaceRecognitionService {
     private readonly azureAdapterService: AzureFaceAdapterService,
     private readonly facePlusPlusService: FacePlusPlusService,
   ) {
-    // Default to 'facepp' in cloud deployments unless explicitly set to 'azure' or 'insightface'
-    const rawProvider = process.env.FACE_PROVIDER;
-    const hasInsightFaceUrl = Boolean(process.env.INSIGHTFACE_SERVICE_URL);
-    const configuredProvider = (
-      rawProvider || (hasInsightFaceUrl ? 'insightface' : 'facepp')
-    ).toLowerCase();
+    const rawProvider = (process.env.FACE_PROVIDER || 'facepp').toLowerCase();
+    const hasFacePPKeys = Boolean(
+      process.env.FACEPP_API_KEY ||
+      process.env.FACEPP_API_SECRET ||
+      rawProvider === 'facepp' ||
+      rawProvider === 'face++',
+    );
 
-    if (configuredProvider === 'facepp' || configuredProvider === 'face++') {
+    if (hasFacePPKeys && rawProvider !== 'azure') {
       this.activeService = this.facePlusPlusService;
       this.logger.log('Face Recognition active provider: Face++ (Megvii Cloud API)');
-    } else if (configuredProvider === 'azure') {
+    } else if (rawProvider === 'azure') {
       this.activeService = this.azureAdapterService;
       this.logger.log('Face Recognition active provider: Azure Face');
     } else {

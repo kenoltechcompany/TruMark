@@ -310,24 +310,30 @@ export class PublicRegistrationService {
           .filter((s) => s.faceEmbedding && s.faceEmbedding.length > 0)
           .map((s) => ({ studentId: s.id, embedding: s.faceEmbedding }));
 
-        if (!candidates.length) {
-          throw new BadRequestException(
-            'No enrolled students with facial biometric data found in this class yet.',
+        if (candidates.length > 0) {
+          const match = await this.faceRecognition.identifyFace(
+            session.classId,
+            options.imageBuffer,
+            candidates,
           );
+
+          if (!match || !match.studentId) {
+            throw new BadRequestException('Face not recognized or confidence too low.');
+          }
+
+          matchedStudentId = match.studentId;
+          confidence = match.confidence;
+        } else {
+          const match = await this.faceRecognition.identifyFace(
+            session.classId,
+            options.imageBuffer,
+          );
+          if (!match || (!match.studentId && !match.personId)) {
+            throw new BadRequestException('Face not recognized or confidence too low.');
+          }
+          matchedStudentId = match.studentId || null;
+          confidence = match.confidence;
         }
-
-        const match = await this.faceRecognition.identifyFace(
-          session.classId,
-          options.imageBuffer,
-          candidates,
-        );
-
-        if (!match || !match.studentId) {
-          throw new BadRequestException('Face not recognized or confidence too low.');
-        }
-
-        matchedStudentId = match.studentId;
-        confidence = match.confidence;
       } else {
         // Face++ or Azure Face identification
         const match = await this.faceRecognition.identifyFace(session.classId, options.imageBuffer);
