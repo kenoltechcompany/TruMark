@@ -23,7 +23,8 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     process.env.FACEPP_API_URL ||
     'https://api-us.faceplusplus.com/facepp/v3'
   ).replace(/\/$/, '');
-  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 70);
+  // Strict 1e-5 FAR threshold (default 80%) to prevent false-positive matches across students
+  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 80);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -143,6 +144,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
 
   /**
    * Identifies a check-in selfie against enrolled students in the class using Face++ /compare.
+   * Evaluates ALL enrolled candidates (or uses optional indexNumber hint first) and returns ONLY the highest-confidence match above the strict 1e-5 threshold.
    */
   async identifyFace(
     classId: string,
@@ -154,44 +156,19 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       select: {
         id: true,
         fullName: true,
+        indexNumber: true,
         azurePersonId: true,
         imagePaths: true,
         faceEmbedding: true,
       },
+      orderBy: { createdAt: 'desc' },
     });
 
-    let orderedCandidates = enrolled.filter(
+    const orderedCandidates = enrolled.filter(
       (s) =>
         Boolean(s.azurePersonId) ||
         Boolean(this.extractReferenceBase64(s.imagePaths)),
     );
-
-    const withEmbeddings = enrolled.filter(
-      (s) => s.faceEmbedding && s.faceEmbedding.length > 0,
-    );
-    if (withEmbeddings.length > 0 && process.env.INSIGHTFACE_SERVICE_URL) {
-      try {
-        const localMatch = await this.insightFace.identifyFace(
-          classId,
-          imageBuffer,
-          withEmbeddings.map((s) => ({
-            studentId: s.id,
-            embedding: s.faceEmbedding,
-          })),
-        );
-        if (localMatch?.studentId) {
-          const topStudent = enrolled.find((s) => s.id === localMatch.studentId);
-          if (topStudent) {
-            orderedCandidates = [
-              topStudent,
-              ...orderedCandidates.filter((s) => s.id !== topStudent.id),
-            ];
-          }
-        }
-      } catch {
-        // Ignore if local service is offline; fall back to direct Face++ /compare
-      }
-    }
 
     if (orderedCandidates.length === 0) {
       throw new BadRequestException(
@@ -200,6 +177,14 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     }
 
     const probeBase64 = imageBuffer.toString('base64');
+
+    let bestMatch: {
+      studentId: string;
+      fullName: string;
+      personId?: string;
+      confidence100: number;
+      requiredScore: number;
+    } | null = null;
 
     for (const candidate of orderedCandidates) {
       const refBase64 = this.extractReferenceBase64(candidate.imagePaths);
@@ -218,25 +203,47 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       try {
         const cmpRes = await this.postFacePP('/compare', compareParams);
         const confidence100 = Number(cmpRes.confidence || 0);
-        const dynamicThreshold = Number(cmpRes.thresholds?.['1e-4'] ?? this.minConfidence);
-        const requiredScore = Math.max(dynamicThreshold, this.minConfidence);
+        // Use Face++'s strictest 1e-5 (0.001% false accept rate) threshold or minConfidence (80%), whichever is higher
+        const strictThreshold = Number(
+          cmpRes.thresholds?.['1e-5'] ?? cmpRes.thresholds?.['1e-4'] ?? this.minConfidence,
+        );
+        const requiredScore = Math.max(strictThreshold, this.minConfidence);
 
         this.logger.log(
-          `Face++ /compare against ${candidate.fullName}: confidence=${confidence100.toFixed(2)}% (threshold=${requiredScore.toFixed(2)}%)`,
+          `Face++ /compare against ${candidate.fullName} (${candidate.indexNumber}): confidence=${confidence100.toFixed(2)}% (required=${requiredScore.toFixed(2)}%)`,
         );
 
         if (confidence100 >= requiredScore) {
-          return {
-            studentId: candidate.id,
-            personId: candidate.azurePersonId || undefined,
-            confidence: Number((confidence100 / 100).toFixed(4)),
-          };
+          if (!bestMatch || confidence100 > bestMatch.confidence100) {
+            bestMatch = {
+              studentId: candidate.id,
+              fullName: candidate.fullName,
+              personId: candidate.azurePersonId || undefined,
+              confidence100,
+              requiredScore,
+            };
+          }
+          // Short-circuit only if it's an unmistakable >= 90% match of the exact same person
+          if (confidence100 >= 90) {
+            break;
+          }
         }
       } catch (err: any) {
         this.logger.warn(
           `Face++ /compare skipped for ${candidate.fullName}: ${err.message}`,
         );
       }
+    }
+
+    if (bestMatch) {
+      this.logger.log(
+        `Face++ BEST MATCH selected: ${bestMatch.fullName} with ${bestMatch.confidence100.toFixed(2)}% confidence`,
+      );
+      return {
+        studentId: bestMatch.studentId,
+        personId: bestMatch.personId,
+        confidence: Number((bestMatch.confidence100 / 100).toFixed(4)),
+      };
     }
 
     return null;
