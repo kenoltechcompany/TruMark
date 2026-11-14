@@ -16,7 +16,9 @@ export class FacePlusPlusService implements IFaceRecognitionService {
   private readonly apiKey = process.env.FACEPP_API_KEY || '';
   private readonly apiSecret = process.env.FACEPP_API_SECRET || '';
   private readonly baseUrl = (
-    process.env.FACEPP_BASE_URL || 'https://api-us.faceplusplus.com/facepp/v3'
+    process.env.FACEPP_BASE_URL ||
+    process.env.FACEPP_API_URL ||
+    'https://api-us.faceplusplus.com/facepp/v3'
   ).replace(/\/$/, '');
   private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 70);
 
@@ -31,6 +33,30 @@ export class FacePlusPlusService implements IFaceRecognitionService {
         'Face++ API credentials (FACEPP_API_KEY and FACEPP_API_SECRET) are not configured in .env.',
       );
     }
+  }
+
+  /**
+   * Resolves a base64 JPEG string from a student's imagePaths (supports both local files and inline data:image/* URIs for ephemeral cloud hosts like Render).
+   */
+  private extractReferenceBase64(imagePaths: string[] | null | undefined): string | null {
+    if (!imagePaths || !Array.isArray(imagePaths)) return null;
+
+    for (const p of imagePaths) {
+      if (!p) continue;
+      if (p.startsWith('data:image/')) {
+        const commaIdx = p.indexOf(',');
+        if (commaIdx !== -1) {
+          return p.slice(commaIdx + 1);
+        }
+      } else if (existsSync(p)) {
+        try {
+          return readFileSync(p).toString('base64');
+        } catch {
+          // continue checking other paths
+        }
+      }
+    }
+    return null;
   }
 
   /**
@@ -64,7 +90,6 @@ export class FacePlusPlusService implements IFaceRecognitionService {
 
       const errMsg: string = data.error_message || `HTTP ${response.status}`;
 
-      // Retry automatically when hitting Face++ QPS rate limits
       if (errMsg.includes('CONCURRENCY_LIMIT_EXCEEDED') && attempt < retries) {
         const delayMs = attempt * 650 + Math.floor(Math.random() * 250);
         this.logger.warn(
@@ -79,7 +104,6 @@ export class FacePlusPlusService implements IFaceRecognitionService {
   }
 
   async extractEmbedding(imageBuffers: Buffer[]): Promise<number[]> {
-    // Also extract local 512-d vector if local service is available for <1ms candidate pre-ranking
     try {
       return await this.insightFace.extractEmbedding(imageBuffers);
     } catch {
@@ -112,8 +136,6 @@ export class FacePlusPlusService implements IFaceRecognitionService {
 
   /**
    * Identifies a check-in selfie against enrolled students in the class using Face++ /compare.
-   * Uses local 512-d vectors (when available) to shortlist the top candidate in <1ms so only
-   * a single Face++ /compare call is needed per check-in.
    */
   async identifyFace(
     classId: string,
@@ -131,14 +153,12 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       },
     });
 
-    // Keep students who have either a reference photo on disk or a Face++ face_token
     let orderedCandidates = enrolled.filter(
       (s) =>
         Boolean(s.azurePersonId) ||
-        (s.imagePaths && s.imagePaths.some((p) => existsSync(p))),
+        Boolean(this.extractReferenceBase64(s.imagePaths)),
     );
 
-    // Pre-rank with local 512-d embedding if available so the matching student is checked first
     const withEmbeddings = enrolled.filter(
       (s) => s.faceEmbedding && s.faceEmbedding.length > 0,
     );
@@ -175,13 +195,13 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     const probeBase64 = imageBuffer.toString('base64');
 
     for (const candidate of orderedCandidates) {
-      const validImagePath = (candidate.imagePaths || []).find((p) => existsSync(p));
+      const refBase64 = this.extractReferenceBase64(candidate.imagePaths);
       const compareParams: Record<string, string> = {
         image_base64_2: probeBase64,
       };
 
-      if (validImagePath) {
-        compareParams.image_base64_1 = readFileSync(validImagePath).toString('base64');
+      if (refBase64) {
+        compareParams.image_base64_1 = refBase64;
       } else if (candidate.azurePersonId) {
         compareParams.face_token1 = candidate.azurePersonId;
       } else {
@@ -226,9 +246,17 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     const synced: SyncStudentResult[] = [];
 
     for (const student of students) {
-      const buffers = (student.imagePaths || [])
-        .filter((p) => existsSync(p))
-        .map((p) => readFileSync(p));
+      const buffers: Buffer[] = [];
+      for (const p of student.imagePaths || []) {
+        if (p.startsWith('data:image/')) {
+          const commaIdx = p.indexOf(',');
+          if (commaIdx !== -1) {
+            buffers.push(Buffer.from(p.slice(commaIdx + 1), 'base64'));
+          }
+        } else if (existsSync(p)) {
+          buffers.push(readFileSync(p));
+        }
+      }
 
       if (buffers.length === 0) continue;
 

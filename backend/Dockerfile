@@ -43,4 +43,4 @@ RUN mkdir -p /app/uploads
 
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "npx prisma db push && node dist/src/main.js"]

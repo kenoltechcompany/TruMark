@@ -5,13 +5,13 @@ const logger = new Logger('FileCleanupUtil');
 
 /**
  * Safely removes a list of file paths from local disk.
- * Catches and logs errors without breaking ongoing transactions.
+ * Skips inline data:image/* URIs stored for cloud persistence.
  */
 export function deleteLocalFiles(filePaths: string[] | null | undefined): void {
   if (!filePaths || !Array.isArray(filePaths)) return;
 
   for (const filePath of filePaths) {
-    if (!filePath) continue;
+    if (!filePath || filePath.startsWith('data:')) continue;
     try {
       if (existsSync(filePath)) {
         unlinkSync(filePath);

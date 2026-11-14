@@ -12,6 +12,23 @@ import { deleteLocalFiles } from '../utils/file-cleanup.util';
 export class AdminsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async onModuleInit() {
+    try {
+      const count = await this.prisma.admin.count();
+      if (count === 0) {
+        const username = process.env.INITIAL_ADMIN_USERNAME || 'admin';
+        const password = process.env.INITIAL_ADMIN_PASSWORD || 'password123';
+        const passwordHash = await bcrypt.hash(password, 10);
+        await this.prisma.admin.create({
+          data: { username, passwordHash },
+        });
+        console.log(`[AdminsService] Seeded initial administrator account: @${username}`);
+      }
+    } catch {
+      // Ignore if schema is not pushed yet
+    }
+  }
+
   async create(data: { username: string; password: string }) {
     const existing = await this.prisma.admin.findUnique({
       where: { username: data.username },

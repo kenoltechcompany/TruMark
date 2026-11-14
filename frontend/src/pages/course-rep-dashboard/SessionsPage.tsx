@@ -598,13 +598,12 @@ export default function SessionsPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
-                    const token = localStorage.getItem('token');
-                    fetch(`/api/course-rep/sessions/${selectedSession}/export`, {
-                      headers: { Authorization: `Bearer ${token}` },
-                    })
-                      .then((r) => r.blob())
-                      .then((blob) => {
-                        const url = URL.createObjectURL(blob);
+                    apiClient
+                      .get(`/course-rep/sessions/${selectedSession}/export`, {
+                        responseType: 'blob',
+                      })
+                      .then((r) => {
+                        const url = URL.createObjectURL(r.data);
                         const a = document.createElement('a');
                         a.href = url;
                         a.download = `attendance_${selectedSession}.csv`;

@@ -57,6 +57,7 @@ export class PublicRegistrationService {
     // Extract facial embedding (InsightFace) or enroll face_token (Face++)
     let faceEmbedding: number[] = [];
     let azurePersonId: string | null = null;
+    const persistedImagePaths = [...imagePaths];
     try {
       const buffers: Buffer[] = [];
       for (const p of imagePaths) {
@@ -65,6 +66,7 @@ export class PublicRegistrationService {
         }
       }
       if (buffers.length > 0) {
+        persistedImagePaths.push(`data:image/jpeg;base64,${buffers[0].toString('base64')}`);
         if (this.faceRecognition.providerName === 'insightface') {
           faceEmbedding = await this.faceRecognition.extractEmbedding(buffers);
           this.logger.log(`Extracted 512-d facial embedding for new student: ${data.fullName}`);
@@ -85,7 +87,7 @@ export class PublicRegistrationService {
         fullName: data.fullName,
         indexNumber: data.indexNumber,
         classId,
-        imagePaths,
+        imagePaths: persistedImagePaths,
         faceEmbedding,
         azurePersonId,
       },
