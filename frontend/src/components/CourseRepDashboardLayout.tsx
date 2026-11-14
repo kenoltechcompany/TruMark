@@ -4,8 +4,8 @@ import { Menu, X, LogOut, LayoutDashboard, Calendar, ScanFace } from 'lucide-rea
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
-  { to: '/course-rep-dashboard', label: 'Class Dashboard', end: true, icon: LayoutDashboard },
-  { to: '/course-rep-dashboard/sessions', label: 'Sessions & Attendance', icon: Calendar },
+  { to: '/course-rep-dashboard', label: 'Class Dashboard', shortLabel: 'Roster & Class', end: true, icon: LayoutDashboard },
+  { to: '/course-rep-dashboard/sessions', label: 'Sessions & Attendance', shortLabel: 'Sessions & QR', icon: Calendar },
 ];
 
 export default function CourseRepDashboardLayout() {
@@ -155,11 +155,45 @@ export default function CourseRepDashboardLayout() {
       )}
 
       {/* ── Main Content ── */}
-      <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto">
+      <main className="flex-1 p-4 sm:p-6 pb-20 md:pb-6 max-w-7xl w-full mx-auto overflow-x-hidden">
         <div key={location.pathname} className="animate-enter">
           <Outlet />
         </div>
       </main>
+
+      {/* ── Mobile Bottom Tab Navigation Bar (< md) ── */}
+      <nav
+        aria-label="Mobile Course Rep Navigation"
+        className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-[#D0D7DE] grid grid-cols-3 px-2 py-1.5 shadow-[0_-2px_10px_rgba(31,35,40,0.06)]"
+      >
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center gap-0.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                  isActive
+                    ? 'text-[#0969DA] bg-[#EEF2F6]'
+                    : 'text-[#656D76] hover:text-[#1F2328]'
+                }`
+              }
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              <span>{item.shortLabel}</span>
+            </NavLink>
+          );
+        })}
+        <Link
+          to="/check-in"
+          className="flex flex-col items-center justify-center gap-0.5 py-1 rounded-lg text-[11px] font-semibold text-[#1F883D] hover:bg-[#F6F8FA] transition-colors"
+        >
+          <ScanFace className="w-4 h-4 shrink-0" />
+          <span>Check-In</span>
+        </Link>
+      </nav>
     </div>
   );
 }

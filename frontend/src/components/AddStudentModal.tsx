@@ -42,7 +42,7 @@ export default function AddStudentModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white border border-[#D0D7DE] rounded-xl shadow-lg p-6 w-full max-w-md animate-enter">
+      <div className="bg-white border border-[#D0D7DE] rounded-xl shadow-lg p-4 sm:p-6 w-full max-h-[90dvh] overflow-y-auto max-w-md animate-enter">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg neu-raised flex items-center justify-center text-[#0969DA]">

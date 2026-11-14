@@ -293,7 +293,7 @@ export default function CourseRepsPage() {
               </>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs text-[#656D76] mb-1">Full Name</label>
                     <input
@@ -334,7 +334,7 @@ export default function CourseRepsPage() {
               </>
             )}
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block text-xs text-[#656D76] mb-1">Login Username</label>
                 <input
@@ -500,7 +500,7 @@ export default function CourseRepsPage() {
                   required
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#656D76] mb-1">Username</label>
                   <input

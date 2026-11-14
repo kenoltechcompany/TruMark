@@ -7,6 +7,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Inbox,
 } from 'lucide-react';
 
 export interface Column<T> {
@@ -79,10 +80,10 @@ export default function DataTable<T>({
     if (!sortKey) return filtered;
     const col = columns.find((c) => c.key === sortKey);
     return [...filtered].sort((a, b) => {
-      let valA: any = col?.sortValue
+      const valA: any = col?.sortValue
         ? col.sortValue(a)
         : (a as Record<string, unknown>)[sortKey];
-      let valB: any = col?.sortValue
+      const valB: any = col?.sortValue
         ? col.sortValue(b)
         : (b as Record<string, unknown>)[sortKey];
 
@@ -172,22 +173,26 @@ export default function DataTable<T>({
   const startEntry = totalEntries === 0 ? 0 : (validCurrentPage - 1) * pageSize + 1;
   const endEntry = Math.min(validCurrentPage * pageSize, totalEntries);
 
+  const primaryCol = columns[0];
+  const actionsCol = columns.find((c) => c.key === 'actions');
+  const detailCols = columns.slice(1).filter((c) => c.key !== 'actions');
+
   return (
     <div className="w-full space-y-3">
       {/* ── Top Bar: Search, Filters & Bulk Actions ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 flex-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
           <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#656D76]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#656D76] pointer-events-none" />
             <input
               type="text"
-              placeholder="Search..."
+              placeholder="Search records..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-full pl-9 pr-8 py-1.5 text-sm bg-white border border-[#D0D7DE] rounded-md focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:border-transparent transition-all shadow-sm"
+              className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-white border border-[#D0D7DE] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:border-[#0969DA] transition-all shadow-2xs"
             />
             {search && (
               <button
@@ -200,25 +205,25 @@ export default function DataTable<T>({
             )}
           </div>
 
-          {filterSlot && <div className="flex items-center gap-2">{filterSlot}</div>}
+          {filterSlot && <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">{filterSlot}</div>}
         </div>
 
         {/* Bulk Action Controls */}
         {selectable && selected.size > 0 && (
-          <div className="flex items-center gap-2 animate-in fade-in duration-150">
+          <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 bg-[#EEF2F6] border border-[#D0D7DE] px-3 py-1.5 rounded-lg animate-enter">
             {bulkActionsSlot ? (
               bulkActionsSlot(Array.from(selected))
             ) : onBulkAction ? (
               <button
                 onClick={handleBulkAction}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#CF222E] text-white text-xs font-semibold rounded-md hover:bg-[#A40E26] shadow-sm transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#CF222E] text-white text-xs font-semibold rounded-md hover:bg-[#A40E26] transition-colors cursor-pointer"
               >
                 {bulkActionLabel} ({selected.size})
               </button>
             ) : null}
             <button
               onClick={() => setSelected(new Set())}
-              className="text-xs text-[#656D76] hover:text-[#1F2328] underline"
+              className="text-xs text-[#656D76] hover:text-[#1F2328] underline cursor-pointer"
             >
               Clear selection
             </button>
@@ -226,11 +231,127 @@ export default function DataTable<T>({
         )}
       </div>
 
-      {/* ── Responsive Table ── */}
-      <div className="border border-[#D0D7DE] rounded-lg overflow-hidden bg-white shadow-sm">
+      {/* ── Mobile Select-All Bar (< md) ── */}
+      {selectable && !loading && paginatedData.length > 0 && (
+        <div className="md:hidden flex items-center justify-between bg-white border border-[#D0D7DE] rounded-lg px-3.5 py-2 text-xs shadow-2xs">
+          <label className="inline-flex items-center gap-2 font-semibold text-[#1F2328] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected;
+              }}
+              onChange={toggleAllVisible}
+              className="rounded border-[#D0D7DE] text-[#0969DA] focus:ring-[#0969DA] cursor-pointer"
+            />
+            <span>Select all on page ({paginatedData.length})</span>
+          </label>
+          {selected.size > 0 && (
+            <span className="text-[11px] font-semibold text-[#0969DA]">
+              {selected.size} selected
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Mobile Stacked Card View (< md) ── */}
+      <div className="md:hidden space-y-2.5">
+        {loading ? (
+          <div className="bg-white border border-[#D0D7DE] rounded-xl p-10 text-center shadow-xs">
+            <div className="w-6 h-6 border-2 border-[#0969DA] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <span className="text-xs font-medium text-[#656D76]">Loading records...</span>
+          </div>
+        ) : paginatedData.length === 0 ? (
+          <div className="bg-white border border-[#D0D7DE] rounded-xl p-8 text-center shadow-xs">
+            <div className="w-10 h-10 rounded-full bg-[#EEF2F6] border border-[#D0D7DE] flex items-center justify-center text-[#656D76] mx-auto mb-2">
+              <Inbox className="w-4 h-4" />
+            </div>
+            <p className="text-xs font-semibold text-[#1F2328]">{emptyMessage}</p>
+            {search && (
+              <p className="text-[11px] text-[#656D76] mt-0.5">
+                Try adjusting your search or filters.
+              </p>
+            )}
+          </div>
+        ) : (
+          paginatedData.map((item) => {
+            const key = keyExtractor(item);
+            const isChecked = selected.has(key);
+            return (
+              <div
+                key={key}
+                className={`bg-white border rounded-xl p-3.5 shadow-xs transition-colors space-y-2.5 ${
+                  isChecked
+                    ? 'border-[#0969DA] bg-[#DDF4FF]/25'
+                    : 'border-[#D0D7DE]'
+                }`}
+              >
+                {/* Primary Row */}
+                {primaryCol && (
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                      {selectable && (
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleOne(key)}
+                          className="mt-0.5 rounded border-[#D0D7DE] text-[#0969DA] focus:ring-[#0969DA] cursor-pointer shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-[#656D76] mb-0.5">
+                          {primaryCol.header}
+                        </div>
+                        <div className="text-sm font-bold text-[#1F2328] break-words">
+                          {primaryCol.render
+                            ? primaryCol.render(item)
+                            : String((item as Record<string, unknown>)[primaryCol.key] ?? '')}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Detail Rows */}
+                {detailCols.length > 0 && (
+                  <div className="pt-2 border-t border-[#E1E4E8] grid grid-cols-1 gap-1.5">
+                    {detailCols.map((col) => (
+                      <div
+                        key={col.key}
+                        className="flex items-start justify-between gap-3 text-xs"
+                      >
+                        <span className="text-[11px] font-semibold text-[#656D76] shrink-0">
+                          {col.header}
+                        </span>
+                        <div className="text-right font-medium text-[#1F2328] min-w-0 break-words">
+                          {col.render
+                            ? col.render(item)
+                            : String((item as Record<string, unknown>)[col.key] ?? '')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Actions Footer */}
+                {actionsCol && (
+                  <div className="pt-2.5 border-t border-[#E1E4E8] flex flex-wrap items-center justify-end gap-2">
+                    {actionsCol.render
+                      ? actionsCol.render(item)
+                      : String((item as Record<string, unknown>)[actionsCol.key] ?? '')}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* ── Desktop Table View (md+) ── */}
+      <div className="hidden md:block border border-[#D0D7DE] rounded-xl overflow-hidden bg-white shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left border-collapse">
-            <thead className="bg-[#F6F8FA] border-b border-[#D0D7DE] text-[#656D76] text-xs font-semibold uppercase tracking-wider select-none">
+            <thead className="bg-[#F6F8FA] border-b border-[#D0D7DE] text-[#656D76] text-[11px] font-bold uppercase tracking-wider select-none">
               <tr>
                 {selectable && (
                   <th className="px-4 py-3 w-10 text-center">
@@ -277,7 +398,7 @@ export default function DataTable<T>({
                 })}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#D0D7DE] text-[#1F2328]">
+            <tbody className="divide-y divide-[#E1E4E8] text-[#1F2328]">
               {loading ? (
                 <tr>
                   <td
@@ -330,7 +451,7 @@ export default function DataTable<T>({
                       {columns.map((col) => (
                         <td
                           key={col.key}
-                          className={`px-4 py-3 text-sm ${col.className || ''}`}
+                          className={`px-4 py-3 text-xs sm:text-sm ${col.className || ''}`}
                         >
                           {col.render
                             ? col.render(item)
@@ -344,60 +465,62 @@ export default function DataTable<T>({
             </tbody>
           </table>
         </div>
+      </div>
 
-        {/* ── Pagination Footer ── */}
-        <div className="px-4 py-3 bg-[#F6F8FA] border-t border-[#D0D7DE] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-[#656D76]">
-          <div className="flex items-center gap-4">
-            <span>
-              Showing <strong className="text-[#1F2328]">{startEntry}</strong> to{' '}
-              <strong className="text-[#1F2328]">{endEntry}</strong> of{' '}
-              <strong className="text-[#1F2328]">{totalEntries}</strong> entries
-              {search && ` (filtered from ${data.length} total)`}
-            </span>
+      {/* ── Pagination Footer (Mobile & Desktop) ── */}
+      <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white border border-[#D0D7DE] rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-[#656D76] shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between sm:justify-start gap-3">
+          <span>
+            Showing <strong className="text-[#1F2328]">{startEntry}</strong>–
+            <strong className="text-[#1F2328]">{endEntry}</strong> of{' '}
+            <strong className="text-[#1F2328]">{totalEntries}</strong>
+            {search && ` (filtered)`}
+          </span>
 
-            <div className="flex items-center gap-1.5">
-              <span>Per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="bg-white border border-[#D0D7DE] rounded px-2 py-0.5 text-xs text-[#1F2328] focus:outline-none focus:ring-1 focus:ring-[#0969DA]"
-              >
-                {[5, 10, 25, 50, 100].map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Page navigation */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={validCurrentPage <= 1}
-              className="inline-flex items-center justify-center p-1.5 rounded border border-[#D0D7DE] bg-white text-[#1F2328] hover:bg-[#F6F8FA] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              title="Previous page"
+          <div className="flex items-center gap-1.5">
+            <span>Rows:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-md px-2 py-0.5 text-xs text-[#1F2328] focus:outline-none focus:ring-1 focus:ring-[#0969DA]"
             >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            <span className="px-2 text-[#1F2328] font-medium">
-              Page {validCurrentPage} of {totalPages}
-            </span>
-
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={validCurrentPage >= totalPages}
-              className="inline-flex items-center justify-center p-1.5 rounded border border-[#D0D7DE] bg-white text-[#1F2328] hover:bg-[#F6F8FA] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              title="Next page"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+              {[5, 10, 25, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
           </div>
+        </div>
+
+        {/* Page navigation */}
+        <div className="flex items-center justify-between sm:justify-end gap-1.5">
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={validCurrentPage <= 1}
+            className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-md border border-[#D0D7DE] bg-[#F6F8FA] text-[#1F2328] font-semibold hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            title="Previous page"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span className="sm:hidden">Prev</span>
+          </button>
+
+          <span className="px-2 text-[#1F2328] font-semibold">
+            Page {validCurrentPage} of {totalPages}
+          </span>
+
+          <button
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={validCurrentPage >= totalPages}
+            className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-md border border-[#D0D7DE] bg-[#F6F8FA] text-[#1F2328] font-semibold hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            title="Next page"
+          >
+            <span className="sm:hidden">Next</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>

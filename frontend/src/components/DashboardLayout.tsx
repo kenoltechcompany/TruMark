@@ -16,12 +16,12 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
-  { to: '/course-reps', label: 'Course Reps', icon: UserCheck },
-  { to: '/classes', label: 'Classes', icon: BookOpen },
-  { to: '/classrooms', label: 'Classrooms', icon: MapPin },
-  { to: '/all-students', label: 'All Students', icon: Users },
-  { to: '/admins', label: 'Administrators', icon: Shield },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/course-reps', label: 'Course Reps', shortLabel: 'Reps', icon: UserCheck },
+  { to: '/classes', label: 'Classes', shortLabel: 'Classes', icon: BookOpen },
+  { to: '/classrooms', label: 'Classrooms', shortLabel: 'Halls', icon: MapPin },
+  { to: '/all-students', label: 'All Students', shortLabel: 'Roster', icon: Users },
+  { to: '/admins', label: 'Administrators', shortLabel: 'Admins', icon: Shield },
+  { to: '/settings', label: 'Settings', shortLabel: 'Settings', icon: Settings },
 ];
 
 export default function DashboardLayout() {
@@ -50,13 +50,23 @@ export default function DashboardLayout() {
           />
         </Link>
 
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-1.5 text-[#656D76] hover:text-[#1F2328] rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] focus:outline-none cursor-pointer"
-          aria-label="Toggle navigation menu"
-        >
-          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/check-in"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] text-[11px] font-semibold text-[#1F2328]"
+          >
+            <ScanFace className="w-3.5 h-3.5 text-[#1F883D]" />
+            <span>Check-In</span>
+          </Link>
+
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-1.5 text-[#656D76] hover:text-[#1F2328] rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] focus:outline-none cursor-pointer"
+            aria-label="Toggle navigation menu"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </header>
 
       {/* ── Mobile Drawer Backdrop ── */}
@@ -184,13 +194,39 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        {/* Page Content with Subtle Route Transition */}
-        <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto overflow-x-hidden">
+        {/* Page Content with Subtle Route Transition & Bottom Padding for Mobile Tab Bar */}
+        <main className="flex-1 p-4 sm:p-6 pb-20 md:pb-6 max-w-7xl w-full mx-auto overflow-x-hidden">
           <div key={location.pathname} className="animate-enter">
             <Outlet />
           </div>
         </main>
       </div>
+
+      {/* ── Mobile Bottom Tab Navigation Bar (< md) ── */}
+      <nav
+        aria-label="Mobile Admin Navigation"
+        className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-[#D0D7DE] grid grid-cols-6 px-1 py-1.5 shadow-[0_-2px_10px_rgba(31,35,40,0.06)]"
+      >
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center gap-0.5 py-1 rounded-lg text-[10px] font-semibold transition-colors ${
+                  isActive
+                    ? 'text-[#0969DA] bg-[#EEF2F6]'
+                    : 'text-[#656D76] hover:text-[#1F2328]'
+                }`
+              }
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              <span className="truncate max-w-full px-0.5">{item.shortLabel}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
     </div>
   );
 }
