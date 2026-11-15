@@ -7,11 +7,12 @@ import {
   Camera,
   CheckCircle2,
   ShieldCheck,
-  AlertCircle,
   ArrowRight,
   ArrowLeft,
   RefreshCw,
   Lock,
+  XCircle,
+  RotateCcw,
 } from 'lucide-react';
 import apiClient from '../../api/client';
 
@@ -28,6 +29,11 @@ export default function PublicRegistrationPage() {
   const [currentCapture, setCurrentCapture] = useState(0);
   const [cameraReady, setCameraReady] = useState(false);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
+
+  // Hands-free Auto-Capture states
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
+  const [autoCaptureCountdown, setAutoCaptureCountdown] = useState<number | null>(null);
+  const [autoCapturePaused, setAutoCapturePaused] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -82,6 +88,7 @@ export default function PublicRegistrationPage() {
   // ── Camera controls (Progressive fallback for laptops/phones & busy webcams) ──
   const startCamera = useCallback(async () => {
     setError('');
+    setAutoCapturePaused(false);
     setStep('biometrics');
     setIsStartingCamera(true);
 
@@ -97,7 +104,6 @@ export default function PublicRegistrationPage() {
           video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
         });
       } catch {
-        // Fallback to any available video camera if ideal constraints fail
         stream = await navigator.mediaDevices.getUserMedia({ video: true });
       }
 
@@ -110,6 +116,7 @@ export default function PublicRegistrationPage() {
       }
     } catch (err: any) {
       setCameraReady(false);
+      setAutoCapturePaused(true);
       if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
         setError(
           'Your camera is currently in use by another tab or app. Close any other TruMark check-in tab and tap "Retry Camera".',
@@ -136,7 +143,7 @@ export default function PublicRegistrationPage() {
         formData,
         {
           headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 30000,
+          timeout: 45000,
         },
       );
     },
@@ -145,18 +152,18 @@ export default function PublicRegistrationPage() {
       setStep('done');
     },
     onError: (err: any) => {
+      setAutoCapturePaused(true);
       setError(
         err.response?.data?.message ||
-          'Registration failed. Ensure your face is clearly visible.',
+          'Enrollment failed. Ensure your face is clearly visible in good lighting and try again.',
       );
       setStep('biometrics');
       setCapturedImages([]);
       setCurrentCapture(0);
-      startCamera();
     },
   });
 
-  const snapPhoto = () => {
+  const snapPhoto = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || !cameraReady) return;
@@ -168,13 +175,14 @@ export default function PublicRegistrationPage() {
     canvas.height = Math.round(rawH * scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
         const next = [...capturedImages, blob];
         setCapturedImages(next);
+        setAutoCaptureCountdown(null);
 
         if (currentCapture >= 2) {
           stopCamera();
@@ -184,9 +192,63 @@ export default function PublicRegistrationPage() {
         }
       },
       'image/jpeg',
-      0.9,
+      0.85,
     );
-  };
+  }, [cameraReady, capturedImages, currentCapture, stopCamera, submitMutation]);
+
+  // Hands-free Auto-Capture countdown for each of the 3 angles
+  useEffect(() => {
+    const canAutoCapture =
+      step === 'biometrics' &&
+      cameraReady &&
+      autoCaptureEnabled &&
+      !autoCapturePaused &&
+      !submitMutation.isPending &&
+      !error;
+
+    if (!canAutoCapture) {
+      setAutoCaptureCountdown(null);
+      return;
+    }
+
+    let cancelled = false;
+    let countdownTimer: ReturnType<typeof setInterval> | null = null;
+
+    // Give a 1.3s pause between angles so the student has time to turn slightly left/right
+    const prepDelayMs = currentCapture === 0 ? 500 : 1400;
+    const prepTimer = setTimeout(() => {
+      if (cancelled) return;
+      let remaining = 3;
+      setAutoCaptureCountdown(remaining);
+
+      countdownTimer = setInterval(() => {
+        if (cancelled) return;
+        remaining -= 1;
+        if (remaining <= 0) {
+          if (countdownTimer) clearInterval(countdownTimer);
+          setAutoCaptureCountdown(null);
+          snapPhoto();
+        } else {
+          setAutoCaptureCountdown(remaining);
+        }
+      }, 900);
+    }, prepDelayMs);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(prepTimer);
+      if (countdownTimer) clearInterval(countdownTimer);
+    };
+  }, [
+    step,
+    cameraReady,
+    autoCaptureEnabled,
+    autoCapturePaused,
+    submitMutation.isPending,
+    error,
+    currentCapture,
+    snapPhoto,
+  ]);
 
   const prompts = [
     { title: 'Angle 1 of 3: Front Profile', instruction: 'Look straight into the camera with neutral lighting' },
@@ -252,44 +314,65 @@ export default function PublicRegistrationPage() {
           </div>
         )}
 
+        {/* High-Visibility Enrollment Success Card */}
         {step === 'done' && (
-          <div className="bg-white border border-[#34D058] rounded-xl p-6 sm:p-8 text-center shadow-sm animate-enter">
-            <div className="w-16 h-16 neu-raised flex items-center justify-center text-[#1F883D] mx-auto mb-4">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-            <h2 className="text-xl font-bold text-[#1F2328] mb-1">
-              Biometric Profile Enrolled
-            </h2>
-            <p className="text-xs text-[#1F883D] font-semibold mb-6">
-              Your 3-angle facial signature has been registered for {className}.
-            </p>
-
-            <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl p-4 text-left max-w-sm mx-auto mb-6 space-y-2 text-xs">
-              <div className="flex justify-between gap-2">
-                <span className="text-[#656D76]">Full Name</span>
-                <span className="font-bold text-[#1F2328] text-right">{fullName}</span>
+          <div className="bg-white border-2 border-[#1F883D] rounded-2xl overflow-hidden shadow-lg animate-enter">
+            <div className="bg-[#1F883D] text-white px-6 py-7 text-center">
+              <div className="w-16 h-16 rounded-full bg-white text-[#1F883D] flex items-center justify-center mx-auto mb-3 shadow-md">
+                <CheckCircle2 className="w-9 h-9" />
               </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-[#656D76]">Index Number</span>
-                <span className="font-mono font-bold text-[#1F2328]">{indexNumber}</span>
-              </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-[#656D76]">Enrolled Class</span>
-                <span className="font-medium text-[#1F2328] text-right">{className}</span>
-              </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-[#656D76]">Biometric Status</span>
-                <span className="text-[#1F883D] font-bold">3 / 3 Reference Captures</span>
-              </div>
+              <span className="inline-block bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-0.5 rounded-full mb-2">
+                Enrollment Complete
+              </span>
+              <h2 className="text-2xl font-extrabold tracking-tight">
+                Face Profile Registered!
+              </h2>
+              <p className="text-xs sm:text-sm text-white/90 mt-1">
+                Your 3-angle facial signature is now active for <strong>{className}</strong>.
+              </p>
             </div>
 
-            <Link
-              to="/check-in"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-[#0969DA] text-white px-5 py-2.5 rounded-lg text-xs font-semibold hover:bg-[#0353A4] transition-colors"
-            >
-              <span>Proceed to Session Check-In</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            <div className="p-6 text-center space-y-5">
+              {/* 3-Angle Verified Strip */}
+              <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto">
+                {['Front Profile', 'Left Angle', 'Right Angle'].map((label) => (
+                  <div
+                    key={label}
+                    className="bg-[#E6F6EC] border border-[#34D058]/60 text-[#1F883D] rounded-lg py-1.5 px-2 text-[11px] font-bold flex items-center justify-center gap-1"
+                  >
+                    <CheckCircle2 className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl p-4 text-left max-w-sm mx-auto space-y-2 text-xs">
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#656D76]">Full Name</span>
+                  <span className="font-bold text-[#1F2328] text-right">{fullName}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#656D76]">Index Number</span>
+                  <span className="font-mono font-bold text-[#1F2328]">{indexNumber}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#656D76]">Enrolled Class</span>
+                  <span className="font-medium text-[#1F2328] text-right">{className}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#656D76]">Biometric Status</span>
+                  <span className="text-[#1F883D] font-bold">3 / 3 Verified</span>
+                </div>
+              </div>
+
+              <Link
+                to="/check-in"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-[#0969DA] text-white px-6 py-2.5 rounded-lg text-xs font-bold hover:bg-[#0353A4] transition-colors"
+              >
+                <span>Proceed to Session Check-In</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
         )}
 
@@ -304,7 +387,7 @@ export default function PublicRegistrationPage() {
                 {className}
               </h2>
               <p className="text-xs text-[#656D76] mt-1">
-                Register your student index number and 3 reference face angles for instant classroom check-in.
+                Register your student index number and 3 reference face angles for hands-free classroom check-in.
               </p>
             </div>
 
@@ -328,29 +411,36 @@ export default function PublicRegistrationPage() {
               </div>
             </div>
 
-            {/* Main Card */}
-            <div className="bg-white border border-[#D0D7DE] rounded-xl p-4 sm:p-6 shadow-xs">
-              {error && (
-                <div
-                  role="alert"
-                  className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] text-xs p-3 rounded-lg mb-4 flex items-center justify-between gap-2 animate-enter"
-                >
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{error}</span>
+            {/* High-Visibility Enrollment Error Card */}
+            {error && (
+              <div
+                role="alert"
+                className="bg-white border-2 border-[#CF222E] rounded-xl overflow-hidden shadow-md animate-enter"
+              >
+                <div className="bg-[#CF222E] text-white px-4 py-2.5 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 font-bold text-xs sm:text-sm">
+                    <XCircle className="w-4 h-4 shrink-0" />
+                    <span>Enrollment Issue</span>
                   </div>
                   {step === 'biometrics' && (
                     <button
                       type="button"
                       onClick={startCamera}
-                      className="shrink-0 bg-white border border-[#FF8182] text-[#CF222E] px-2.5 py-1 rounded-md text-[11px] font-semibold hover:bg-[#FFEBE9] cursor-pointer"
+                      className="inline-flex items-center gap-1 bg-white text-[#CF222E] px-2.5 py-1 rounded-md text-[11px] font-bold hover:bg-[#FFEBE9] transition-colors cursor-pointer"
                     >
-                      Retry Camera
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Restart Capture</span>
                     </button>
                   )}
                 </div>
-              )}
+                <div className="p-3.5 bg-[#FFEBE9]/40 text-xs font-medium text-[#CF222E]">
+                  {error}
+                </div>
+              </div>
+            )}
 
+            {/* Main Card */}
+            <div className="bg-white border border-[#D0D7DE] rounded-xl p-4 sm:p-6 shadow-xs">
               {step === 'identity' && (
                 <form
                   onSubmit={(e) => {
@@ -406,7 +496,7 @@ export default function PublicRegistrationPage() {
 
               {step === 'biometrics' && (
                 <div className="space-y-3.5 sm:space-y-4">
-                  {/* 3-Photo Progress Prompt */}
+                  {/* 3-Photo Progress Prompt + Auto-Scan Toggle */}
                   <div className="neu-raised p-3 sm:p-3.5 flex items-center justify-between gap-2.5">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-white border border-[#D0D7DE] flex items-center justify-center text-[#0969DA] font-bold text-xs shrink-0">
@@ -421,9 +511,24 @@ export default function PublicRegistrationPage() {
                         </div>
                       </div>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAutoCaptureEnabled((v) => !v);
+                        setAutoCapturePaused(false);
+                      }}
+                      className={`shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
+                        autoCaptureEnabled
+                          ? 'bg-[#E6F6EC] border-[#34D058] text-[#1F883D]'
+                          : 'bg-white border-[#D0D7DE] text-[#656D76]'
+                      }`}
+                    >
+                      Auto: {autoCaptureEnabled ? 'ON' : 'OFF'}
+                    </button>
                   </div>
 
-                  {/* Camera Viewfinder (Portrait 3:4 on mobile, 4:3 on tablet/desktop) */}
+                  {/* Camera Viewfinder */}
                   <div className="relative aspect-[3/4] sm:aspect-[4/3] max-h-[55vh] sm:max-h-none bg-[#0D1117] rounded-xl overflow-hidden border border-[#1F2328] flex items-center justify-center">
                     <video
                       ref={attachVideoRef}
@@ -451,8 +556,37 @@ export default function PublicRegistrationPage() {
                       </div>
                     </div>
 
+                    {/* Auto-Capture Countdown Pill inside Viewfinder */}
+                    {cameraReady &&
+                      autoCaptureEnabled &&
+                      !autoCapturePaused &&
+                      !submitMutation.isPending &&
+                      autoCaptureCountdown !== null && (
+                        <div className="absolute bottom-3 inset-x-0 flex justify-center px-3 pointer-events-none">
+                          <div className="bg-[#0D1117]/85 border border-[#34D058] text-white px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg">
+                            <span className="w-5 h-5 rounded-full bg-[#1F883D] text-white flex items-center justify-center font-bold text-[11px]">
+                              {autoCaptureCountdown}
+                            </span>
+                            <span>
+                              Capturing Angle {currentCapture + 1}/3 in {autoCaptureCountdown}s
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Enrolling Biometrics Full Overlay */}
+                    {submitMutation.isPending && (
+                      <div className="absolute inset-0 bg-[#0D1117]/85 flex flex-col items-center justify-center p-6 text-center text-white z-10">
+                        <div className="w-12 h-12 border-4 border-[#34D058] border-t-transparent rounded-full animate-spin mb-3" />
+                        <p className="text-sm font-bold">Enrolling Facial Biometrics...</p>
+                        <p className="text-xs text-white/75 mt-1">
+                          Registering your 3 reference angles with Face++
+                        </p>
+                      </div>
+                    )}
+
                     {/* Overlay if camera stream is initializing or blocked */}
-                    {!cameraReady && (
+                    {!cameraReady && !submitMutation.isPending && (
                       <div className="absolute inset-0 bg-[#0D1117]/90 flex flex-col items-center justify-center p-6 text-center text-white">
                         <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-3">
                           {isStartingCamera ? (
@@ -502,12 +636,14 @@ export default function PublicRegistrationPage() {
                       <div className="text-xs font-bold text-[#1F2328] truncate">
                         {submitMutation.isPending
                           ? 'Enrolling Biometrics...'
+                          : autoCaptureCountdown !== null
+                          ? `Auto-capturing ${currentCapture + 1}/3 in ${autoCaptureCountdown}s`
                           : `Capture ${currentCapture + 1} of 3`}
                       </div>
                       <div className="text-[11px] text-[#656D76] truncate">
                         {submitMutation.isPending
                           ? 'Validating Face++'
-                          : 'Tap shutter when aligned'}
+                          : 'Hold still or tap shutter anytime'}
                       </div>
                     </div>
 

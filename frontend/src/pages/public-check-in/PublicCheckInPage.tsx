@@ -14,6 +14,8 @@ import {
   Zap,
   Hash,
   Crosshair,
+  XCircle,
+  RotateCcw,
 } from 'lucide-react';
 import apiClient from '../../api/client';
 
@@ -79,9 +81,16 @@ export default function PublicCheckInPage() {
   const [submitError, setSubmitError] = useState('');
   const [indexNumber, setIndexNumber] = useState('');
 
+  // Hands-free Auto-Capture states
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
+  const [autoCaptureCountdown, setAutoCaptureCountdown] = useState<number | null>(null);
+  const [autoCapturePaused, setAutoCapturePaused] = useState(false);
+  const [faceDetectedHint, setFaceDetectedHint] = useState<string>('Align face inside the oval');
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const captureInFlightRef = useRef(false);
 
   // Fetch session details
   const fetchSession = useCallback(async (id: string) => {
@@ -90,6 +99,8 @@ export default function PublicCheckInPage() {
     setSessionError('');
     setCheckInResult(null);
     setSubmitError('');
+    setAutoCapturePaused(false);
+    setAutoCaptureCountdown(null);
 
     try {
       const res = await apiClient.get<SessionData>(`/public/sessions/${id.trim()}`);
@@ -153,13 +164,18 @@ export default function PublicCheckInPage() {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
 
       streamRef.current = stream;
       setCameraStatus('ready');
@@ -219,7 +235,8 @@ export default function PublicCheckInPage() {
   }
 
   // Capture & Check-In
-  const handleCaptureAndCheckIn = async () => {
+  const handleCaptureAndCheckIn = useCallback(async () => {
+    if (captureInFlightRef.current) return;
     if (!session || !session.isActive) {
       setSubmitError('This session is not currently active for attendance.');
       return;
@@ -254,8 +271,10 @@ export default function PublicCheckInPage() {
       }
     }
 
+    captureInFlightRef.current = true;
     setIsSubmitting(true);
     setSubmitError('');
+    setAutoCaptureCountdown(null);
 
     try {
       const formData = new FormData();
@@ -305,13 +324,107 @@ export default function PublicCheckInPage() {
         streamRef.current = null;
       }
     } catch (err: any) {
+      setAutoCapturePaused(true);
       setSubmitError(
         err.response?.data?.message || err.message || 'Attendance verification failed. Please try again.',
       );
     } finally {
+      captureInFlightRef.current = false;
       setIsSubmitting(false);
     }
-  };
+  }, [
+    session,
+    isGeofenceActive,
+    coords,
+    isWithinGeofence,
+    distanceToClassroom,
+    isBiometricActive,
+    cameraStatus,
+    indexNumber,
+  ]);
+
+  // Hands-free automatic capture countdown when camera & geofence are ready
+  useEffect(() => {
+    const canAutoCapture =
+      Boolean(session?.isActive) &&
+      !checkInResult &&
+      isBiometricActive &&
+      cameraStatus === 'ready' &&
+      (!isGeofenceActive || (locationStatus === 'ready' && isWithinGeofence)) &&
+      autoCaptureEnabled &&
+      !autoCapturePaused &&
+      !isSubmitting &&
+      !submitError;
+
+    if (!canAutoCapture) {
+      setAutoCaptureCountdown(null);
+      return;
+    }
+
+    let cancelled = false;
+    let countdownTimer: ReturnType<typeof setInterval> | null = null;
+
+    const initAutoCapture = async () => {
+      // If browser supports FaceDetector API (Chrome / Android / Edge), wait until a face is visible
+      const FaceDetectorCtor = (window as any).FaceDetector;
+      if (FaceDetectorCtor && videoRef.current) {
+        try {
+          const detector = new FaceDetectorCtor({ fastMode: true, maxDetectedFaces: 1 });
+          setFaceDetectedHint('Looking for your face...');
+          while (!cancelled) {
+            const video = videoRef.current;
+            if (video && video.readyState >= 2 && video.videoWidth > 0) {
+              const faces = await detector.detect(video).catch(() => []);
+              if (faces && faces.length > 0) {
+                break;
+              }
+            }
+            await new Promise((r) => setTimeout(r, 350));
+          }
+        } catch {
+          // Fall through to standard timer if FaceDetector throws
+        }
+      }
+
+      if (cancelled) return;
+      setFaceDetectedHint('Face aligned! Hold still...');
+
+      let remaining = 3;
+      setAutoCaptureCountdown(remaining);
+
+      countdownTimer = setInterval(() => {
+        if (cancelled) return;
+        remaining -= 1;
+        if (remaining <= 0) {
+          if (countdownTimer) clearInterval(countdownTimer);
+          setAutoCaptureCountdown(null);
+          handleCaptureAndCheckIn();
+        } else {
+          setAutoCaptureCountdown(remaining);
+        }
+      }, 950);
+    };
+
+    initAutoCapture();
+
+    return () => {
+      cancelled = true;
+      if (countdownTimer) clearInterval(countdownTimer);
+    };
+  }, [
+    session?.isActive,
+    checkInResult,
+    isBiometricActive,
+    cameraStatus,
+    isGeofenceActive,
+    locationStatus,
+    isWithinGeofence,
+    autoCaptureEnabled,
+    autoCapturePaused,
+    isSubmitting,
+    submitError,
+    handleCaptureAndCheckIn,
+  ]);
 
   const handleManualSessionLookup = (e: React.FormEvent) => {
     e.preventDefault();
@@ -373,7 +486,7 @@ export default function PublicCheckInPage() {
                 Join Active Class Session
               </h2>
               <p className="text-xs sm:text-sm text-[#656D76] mt-1 max-w-md">
-                Enter the Session ID displayed on your lecturer&apos;s screen or scan the session QR code to begin verification.
+                Enter the Session ID or Session Name displayed on your lecturer&apos;s screen, or scan the session QR code.
               </p>
             </div>
 
@@ -382,9 +495,9 @@ export default function PublicCheckInPage() {
               {sessionError && (
                 <div
                   role="alert"
-                  className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] px-3.5 py-2.5 rounded-lg text-xs font-medium mb-4 flex items-center gap-2 animate-enter"
+                  className="bg-[#FFEBE9] border-2 border-[#CF222E]/40 text-[#CF222E] px-4 py-3 rounded-xl text-xs font-semibold mb-4 flex items-center gap-2.5 animate-enter"
                 >
-                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <XCircle className="w-5 h-5 shrink-0" />
                   <span>{sessionError}</span>
                 </div>
               )}
@@ -395,14 +508,14 @@ export default function PublicCheckInPage() {
                     htmlFor="session-id-input"
                     className="block text-xs font-semibold text-[#1F2328] mb-1.5"
                   >
-                    Session ID / Token
+                    Session ID or Session Name
                   </label>
                   <div className="relative">
                     <Hash className="w-4 h-4 text-[#656D76] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       id="session-id-input"
                       type="text"
-                      placeholder="e.g. bfea1f11-5d9f-48f3-9a00-5c63feca4531"
+                      placeholder="e.g. Morning Lecture or session UUID"
                       value={inputSessionId}
                       onChange={(e) => setInputSessionId(e.target.value)}
                       className="w-full bg-white border border-[#D0D7DE] rounded-lg pl-9 pr-3.5 py-2.5 text-sm text-[#1F2328] placeholder:text-[#656D76]/60 focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:border-[#0969DA] transition-shadow"
@@ -437,8 +550,8 @@ export default function PublicCheckInPage() {
                   <Camera className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-[#1F2328]">Live Selfie</div>
-                  <div className="text-[11px] text-[#656D76]">Face++ biometric match</div>
+                  <div className="text-xs font-semibold text-[#1F2328]">Auto Face Scan</div>
+                  <div className="text-[11px] text-[#656D76]">Hands-free Face++ match</div>
                 </div>
               </div>
 
@@ -466,7 +579,7 @@ export default function PublicCheckInPage() {
           </div>
         )}
 
-        {/* 3. Active Session Check-In Console (Mobile-First Above-the-Fold Camera + Desktop 2-Column) */}
+        {/* 3. Active Session Check-In Console */}
         {session && !checkInResult && (
           <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-5 items-start animate-enter">
             {/* ── Compact Mobile Session Header & Sensor Status Bar (visible on < lg above camera) ── */}
@@ -513,7 +626,6 @@ export default function PublicCheckInPage() {
 
                 {/* Compact Mobile Sensor Pills */}
                 <div className="mt-2.5 pt-2.5 border-t border-[#E1E4E8] grid grid-cols-2 gap-2">
-                  {/* Mobile GPS Pill */}
                   <button
                     type="button"
                     onClick={isGeofenceActive ? requestLocation : undefined}
@@ -544,7 +656,6 @@ export default function PublicCheckInPage() {
                     )}
                   </button>
 
-                  {/* Mobile Camera Pill */}
                   <button
                     type="button"
                     onClick={isBiometricActive && cameraStatus !== 'ready' ? startCamera : undefined}
@@ -569,24 +680,45 @@ export default function PublicCheckInPage() {
                   </button>
                 </div>
               </div>
+            </div>
 
-              {/* Error Alert on Mobile right above camera */}
+            {/* ── Right Column on Desktop / Primary Card on Mobile: Biometric Viewfinder & Shutter ── */}
+            <div className="lg:col-span-7 lg:order-2 space-y-3">
+              {/* High-Visibility Error Feedback Banner (Visible on both Mobile & Desktop right above Viewfinder) */}
               {submitError && (
                 <div
                   role="alert"
-                  className="bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] p-3 rounded-xl text-xs font-medium flex items-start gap-2 animate-enter"
+                  className="bg-white border-2 border-[#CF222E] rounded-xl overflow-hidden shadow-md animate-enter"
                 >
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{submitError}</span>
+                  <div className="bg-[#CF222E] text-white px-4 py-2.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 font-bold text-xs sm:text-sm">
+                      <XCircle className="w-4 h-4 shrink-0" />
+                      <span>Verification Failed</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSubmitError('');
+                        setAutoCapturePaused(false);
+                      }}
+                      className="inline-flex items-center gap-1 bg-white text-[#CF222E] px-2.5 py-1 rounded-md text-[11px] font-bold hover:bg-[#FFEBE9] transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Try Again</span>
+                    </button>
+                  </div>
+                  <div className="p-3.5 bg-[#FFEBE9]/40 text-xs text-[#1F2328] space-y-1">
+                    <p className="font-semibold text-[#CF222E]">{submitError}</p>
+                    <p className="text-[11px] text-[#656D76]">
+                      Tip: Ensure your face is well-lit, centered in the oval, and tap <strong>Try Again</strong> to scan automatically.
+                    </p>
+                  </div>
                 </div>
               )}
-            </div>
 
-            {/* ── Right Column on Desktop / First Interactive Card on Mobile: Biometric Viewfinder & Shutter ── */}
-            <div className="lg:col-span-7 lg:order-2">
               <div className="bg-white border border-[#D0D7DE] rounded-xl p-3.5 sm:p-5 shadow-xs">
                 {/* Top HUD Bar */}
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2">
                     <span
                       className={`w-2 h-2 rounded-full ${
@@ -597,9 +729,27 @@ export default function PublicCheckInPage() {
                       Biometric Viewfinder
                     </span>
                   </div>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#656D76] bg-[#F6F8FA] border border-[#D0D7DE] px-2.5 py-0.5 rounded-md">
-<span>Center face in oval</span>
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {isBiometricActive && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAutoCaptureEnabled((v) => !v);
+                          setAutoCapturePaused(false);
+                        }}
+                        className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-md border transition-colors cursor-pointer ${
+                          autoCaptureEnabled
+                            ? 'bg-[#E6F6EC] border-[#34D058] text-[#1F883D]'
+                            : 'bg-[#F6F8FA] border-[#D0D7DE] text-[#656D76]'
+                        }`}
+                      >
+                        Auto-Scan: {autoCaptureEnabled ? 'ON' : 'OFF'}
+                      </button>
+                    )}
+                    <span className="text-[11px] font-medium text-[#656D76] bg-[#F6F8FA] border border-[#D0D7DE] px-2.5 py-0.5 rounded-md">
+                      Center face in oval
+                    </span>
+                  </div>
                 </div>
 
                 {/* Video Viewport (Portrait 3:4 on mobile phones, 4:3 on tablet/desktop) */}
@@ -630,12 +780,40 @@ export default function PublicCheckInPage() {
                         className={`relative w-40 h-52 sm:w-48 sm:h-64 border-2 border-dashed rounded-full transition-colors flex items-center justify-center overflow-hidden ${
                           !isGeofenceActive || isWithinGeofence ? 'border-[#34D058]' : 'border-[#FF8182]'
                         }`}
-                        style={{ opacity: 0.9 }}
+                        style={{ opacity: 0.92 }}
                       >
                         {cameraStatus === 'ready' && (
                           <div className="w-36 sm:w-40 h-0.5 bg-[#34D058]/85 rounded-full animate-scan-line" />
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Live Hands-Free Auto-Capture Countdown Pill inside Viewfinder */}
+                  {isBiometricActive &&
+                    cameraStatus === 'ready' &&
+                    autoCaptureEnabled &&
+                    !autoCapturePaused &&
+                    !isSubmitting &&
+                    autoCaptureCountdown !== null && (
+                      <div className="absolute bottom-3 inset-x-0 flex justify-center px-3 pointer-events-none">
+                        <div className="bg-[#0D1117]/85 border border-[#34D058] text-white px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg">
+                          <span className="w-5 h-5 rounded-full bg-[#1F883D] text-white flex items-center justify-center font-bold text-[11px]">
+                            {autoCaptureCountdown}
+                          </span>
+                          <span>{faceDetectedHint} Capturing in {autoCaptureCountdown}s</span>
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Full-Overlay Verifying State */}
+                  {isSubmitting && (
+                    <div className="absolute inset-0 bg-[#0D1117]/80 flex flex-col items-center justify-center p-6 text-center text-white z-10">
+                      <div className="w-12 h-12 border-4 border-[#34D058] border-t-transparent rounded-full animate-spin mb-3" />
+                      <p className="text-sm font-bold">Verifying Your Face...</p>
+                      <p className="text-xs text-white/75 mt-1">
+                        Matching against enrolled class biometrics
+                      </p>
                     </div>
                   )}
 
@@ -646,7 +824,7 @@ export default function PublicCheckInPage() {
                       </div>
                       <p className="text-sm font-semibold mb-1">Camera Access Required</p>
                       <p className="text-xs text-white/70 mb-4 max-w-xs">
-                        Position your face inside the alignment guide to verify your attendance.
+                        Position your face inside the alignment guide to verify your attendance automatically.
                       </p>
                       <button
                         type="button"
@@ -669,6 +847,8 @@ export default function PublicCheckInPage() {
                             ? 'Matching Face Biometrics...'
                             : isGeofenceActive && !isWithinGeofence
                             ? 'Move Inside Classroom Boundary'
+                            : autoCaptureCountdown !== null
+                            ? `Auto-capturing in ${autoCaptureCountdown}s...`
                             : 'Ready to Verify Attendance'}
                         </div>
                         <div className="text-[11px] text-[#656D76] mt-0.5">
@@ -676,13 +856,16 @@ export default function PublicCheckInPage() {
                             ? `${Math.round(distanceToClassroom ?? 0)}m away from ${session.classroomName} (max ${
                                 session.classroomBoundaries.radiusMeters + 5
                               }m)`
-                            : 'Tap the green shutter button to verify'}
+                            : 'Hold still for auto-scan, or tap shutter anytime'}
                         </div>
                       </div>
 
                       <button
                         type="button"
-                        onClick={handleCaptureAndCheckIn}
+                        onClick={() => {
+                          setAutoCapturePaused(false);
+                          handleCaptureAndCheckIn();
+                        }}
                         disabled={
                           isSubmitting ||
                           !session.isActive ||
@@ -810,7 +993,6 @@ export default function PublicCheckInPage() {
                       </div>
                     </div>
 
-                    {/* Status Badge */}
                     {!isGeofenceActive ? (
                       <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-white border border-[#D0D7DE] text-[#1F883D]">
                         Bypassed
@@ -836,7 +1018,6 @@ export default function PublicCheckInPage() {
                     )}
                   </div>
 
-                  {/* Readout & Refresh Action */}
                   <div className="mt-3 pt-2.5 border-t border-[#D0D7DE]/70 flex items-center justify-between gap-2 text-xs">
                     <div className="text-[11px]">
                       {!isGeofenceActive ? (
@@ -915,7 +1096,7 @@ export default function PublicCheckInPage() {
                       {!isBiometricActive ? (
                         <span className="text-[#656D76]">Index number check-in active.</span>
                       ) : cameraStatus === 'ready' ? (
-                        <span className="text-[#1F883D] font-medium">Camera stream active &amp; oval aligned</span>
+                        <span className="text-[#1F883D] font-medium">Camera stream active &amp; auto-scan ready</span>
                       ) : cameraStatus === 'denied' ? (
                         <span className="text-[#CF222E] font-medium">{cameraError}</span>
                       ) : (
@@ -983,73 +1164,72 @@ export default function PublicCheckInPage() {
                   </p>
                 </div>
               )}
-
-              {/* Error Alert (Desktop) */}
-              {submitError && (
-                <div
-                  role="alert"
-                  className="hidden lg:flex bg-[#FFEBE9] border border-[#FF8182] text-[#CF222E] p-3.5 rounded-xl text-xs font-medium items-start gap-2 animate-enter"
-                >
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{submitError}</span>
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {/* 4. Check-In Success Flash Card */}
+        {/* 4. High-Visibility Attendance Success Card */}
         {checkInResult && (
-          <div className="bg-white border border-[#34D058] rounded-xl p-6 sm:p-8 text-center shadow-sm animate-enter">
-            <div className="w-16 h-16 neu-raised flex items-center justify-center text-[#1F883D] mx-auto mb-4">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-            <h2 className="text-xl font-bold text-[#1F2328] mb-1">Attendance Verified</h2>
-            <p className="text-xs text-[#1F883D] font-semibold mb-6">
-              Your attendance has been recorded for {session?.name}.
-            </p>
-
-            <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl p-4 sm:p-5 text-left max-w-sm mx-auto mb-6 space-y-2.5 text-xs">
-              <div className="flex justify-between gap-2">
-                <span className="text-[#656D76]">Student Name</span>
-                <span className="font-bold text-[#1F2328] text-right">{checkInResult.student.fullName}</span>
+          <div className="bg-white border-2 border-[#1F883D] rounded-2xl overflow-hidden shadow-lg animate-enter">
+            {/* Vibrant Green Confirmation Banner */}
+            <div className="bg-[#1F883D] text-white px-6 py-7 text-center">
+              <div className="w-16 h-16 rounded-full bg-white text-[#1F883D] flex items-center justify-center mx-auto mb-3 shadow-md">
+                <CheckCircle2 className="w-9 h-9" />
               </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-[#656D76]">Index Number</span>
-                <span className="font-mono font-bold text-[#1F2328]">
-                  {checkInResult.student.indexNumber}
-                </span>
-              </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-[#656D76]">Class</span>
-                <span className="font-medium text-[#1F2328] text-right">{session?.className}</span>
-              </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-[#656D76]">Verification Match</span>
-                <span className="font-mono text-[#1F883D] font-bold">
-                  {checkInResult.confidence >= 1
-                    ? 'Verified'
-                    : `${(checkInResult.confidence * 100).toFixed(1)}%`}
-                </span>
-              </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-[#656D76]">Timestamp</span>
-                <span className="text-[#1F2328]">{new Date().toLocaleTimeString()}</span>
-              </div>
+              <span className="inline-block bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-0.5 rounded-full mb-2">
+                Attendance Recorded
+              </span>
+              <h2 className="text-2xl font-extrabold tracking-tight">
+                You&apos;re Marked Present!
+              </h2>
+              <p className="text-xs sm:text-sm text-white/90 mt-1">
+                Verified for <strong>{session?.name}</strong>
+              </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setCheckInResult(null);
-                setSession(null);
-                setInputSessionId('');
-                navigate('/check-in');
-              }}
-              className="w-full sm:w-auto bg-[#0969DA] text-white px-6 py-2.5 rounded-lg text-xs font-semibold hover:bg-[#0353A4] transition-colors cursor-pointer"
-            >
-              Done
-            </button>
+            <div className="p-6 text-center space-y-5">
+              <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl p-4 sm:p-5 text-left max-w-sm mx-auto space-y-2.5 text-xs">
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#656D76]">Student Name</span>
+                  <span className="font-bold text-[#1F2328] text-right">{checkInResult.student.fullName}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#656D76]">Index Number</span>
+                  <span className="font-mono font-bold text-[#1F2328]">
+                    {checkInResult.student.indexNumber}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#656D76]">Class</span>
+                  <span className="font-medium text-[#1F2328] text-right">{session?.className}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#656D76]">Biometric Confidence</span>
+                  <span className="inline-flex items-center gap-1 font-mono bg-[#E6F6EC] text-[#1F883D] border border-[#34D058]/60 px-2 py-0.5 rounded-full font-bold">
+                    {checkInResult.confidence >= 1
+                      ? '100% Verified'
+                      : `${(checkInResult.confidence * 100).toFixed(1)}% Match`}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#656D76]">Time Recorded</span>
+                  <span className="font-semibold text-[#1F2328]">{new Date().toLocaleTimeString()}</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCheckInResult(null);
+                  setSession(null);
+                  setInputSessionId('');
+                  navigate('/check-in');
+                }}
+                className="w-full sm:w-auto bg-[#0969DA] text-white px-8 py-2.5 rounded-lg text-xs font-bold hover:bg-[#0353A4] transition-colors cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
           </div>
         )}
       </main>
