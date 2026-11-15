@@ -684,13 +684,13 @@ export default function PublicCheckInPage() {
 
             {/* ── Right Column on Desktop / Primary Card on Mobile: Biometric Viewfinder & Shutter ── */}
             <div className="lg:col-span-7 lg:order-2 space-y-3">
-              {/* High-Visibility Error Feedback Banner (Visible on both Mobile & Desktop right above Viewfinder) */}
+              {/* High-Visibility Claymorphic Error Feedback Banner */}
               {submitError && (
                 <div
                   role="alert"
-                  className="bg-white border-2 border-[#CF222E] rounded-xl overflow-hidden shadow-md animate-enter"
+                  className="clay-error-card p-2 animate-enter"
                 >
-                  <div className="bg-[#CF222E] text-white px-4 py-2.5 flex items-center justify-between gap-2">
+                  <div className="clay-error-banner text-white px-4 py-2.5 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 font-bold text-xs sm:text-sm">
                       <XCircle className="w-4 h-4 shrink-0" />
                       <span>Verification Failed</span>
@@ -701,14 +701,14 @@ export default function PublicCheckInPage() {
                         setSubmitError('');
                         setAutoCapturePaused(false);
                       }}
-                      className="inline-flex items-center gap-1 bg-white text-[#CF222E] px-2.5 py-1 rounded-md text-[11px] font-bold hover:bg-[#FFEBE9] transition-colors cursor-pointer"
+                      className="clay-btn inline-flex items-center gap-1 bg-white text-[#CF222E] px-3 py-1.5 text-[11px] font-bold hover:bg-[#FFF5F5] cursor-pointer"
                     >
                       <RotateCcw className="w-3 h-3" />
                       <span>Try Again</span>
                     </button>
                   </div>
-                  <div className="p-3.5 bg-[#FFEBE9]/40 text-xs text-[#1F2328] space-y-1">
-                    <p className="font-semibold text-[#CF222E]">{submitError}</p>
+                  <div className="px-3.5 py-3 text-xs text-[#1F2328] space-y-1">
+                    <p className="font-semibold text-[#B71C1C]">{submitError}</p>
                     <p className="text-[11px] text-[#656D76]">
                       Tip: Ensure your face is well-lit, centered in the oval, and tap <strong>Try Again</strong> to scan automatically.
                     </p>
@@ -1168,12 +1168,12 @@ export default function PublicCheckInPage() {
           </div>
         )}
 
-        {/* 4. High-Visibility Attendance Success Card */}
+        {/* 4. High-Visibility Claymorphic Attendance Success Card */}
         {checkInResult && (
-          <div className="bg-white border-2 border-[#1F883D] rounded-2xl overflow-hidden shadow-lg animate-enter">
-            {/* Vibrant Green Confirmation Banner */}
-            <div className="bg-[#1F883D] text-white px-6 py-7 text-center">
-              <div className="w-16 h-16 rounded-full bg-white text-[#1F883D] flex items-center justify-center mx-auto mb-3 shadow-md">
+          <div className="clay-success-card p-3 sm:p-4 animate-enter">
+            {/* Vibrant Sculpted Green Clay Banner */}
+            <div className="clay-success-banner text-white px-6 py-7 text-center">
+              <div className="clay-success-icon w-16 h-16 text-[#1F883D] flex items-center justify-center mx-auto mb-3">
                 <CheckCircle2 className="w-9 h-9" />
               </div>
               <span className="inline-block bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-0.5 rounded-full mb-2">
@@ -1187,8 +1187,8 @@ export default function PublicCheckInPage() {
               </p>
             </div>
 
-            <div className="p-6 text-center space-y-5">
-              <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl p-4 sm:p-5 text-left max-w-sm mx-auto space-y-2.5 text-xs">
+            <div className="p-5 sm:p-6 text-center space-y-5">
+              <div className="clay-inner-panel p-4 sm:p-5 text-left max-w-sm mx-auto space-y-2.5 text-xs">
                 <div className="flex justify-between gap-2">
                   <span className="text-[#656D76]">Student Name</span>
                   <span className="font-bold text-[#1F2328] text-right">{checkInResult.student.fullName}</span>
@@ -1203,9 +1203,9 @@ export default function PublicCheckInPage() {
                   <span className="text-[#656D76]">Class</span>
                   <span className="font-medium text-[#1F2328] text-right">{session?.className}</span>
                 </div>
-                <div className="flex justify-between gap-2">
+                <div className="flex justify-between gap-2 items-center">
                   <span className="text-[#656D76]">Biometric Confidence</span>
-                  <span className="inline-flex items-center gap-1 font-mono bg-[#E6F6EC] text-[#1F883D] border border-[#34D058]/60 px-2 py-0.5 rounded-full font-bold">
+                  <span className="clay-success-pill inline-flex items-center gap-1 font-mono text-[#1F883D] px-2.5 py-0.5 font-bold">
                     {checkInResult.confidence >= 1
                       ? '100% Verified'
                       : `${(checkInResult.confidence * 100).toFixed(1)}% Match`}
@@ -1225,7 +1225,7 @@ export default function PublicCheckInPage() {
                   setInputSessionId('');
                   navigate('/check-in');
                 }}
-                className="w-full sm:w-auto bg-[#0969DA] text-white px-8 py-2.5 rounded-lg text-xs font-bold hover:bg-[#0353A4] transition-colors cursor-pointer"
+                className="clay-btn w-full sm:w-auto bg-[#0969DA] text-white px-8 py-2.5 text-xs font-bold hover:bg-[#0353A4] cursor-pointer"
               >
                 Done
               </button>

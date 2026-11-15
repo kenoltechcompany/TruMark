@@ -314,11 +314,11 @@ export default function PublicRegistrationPage() {
           </div>
         )}
 
-        {/* High-Visibility Enrollment Success Card */}
+        {/* High-Visibility Claymorphic Enrollment Success Card */}
         {step === 'done' && (
-          <div className="bg-white border-2 border-[#1F883D] rounded-2xl overflow-hidden shadow-lg animate-enter">
-            <div className="bg-[#1F883D] text-white px-6 py-7 text-center">
-              <div className="w-16 h-16 rounded-full bg-white text-[#1F883D] flex items-center justify-center mx-auto mb-3 shadow-md">
+          <div className="clay-success-card p-3 sm:p-4 animate-enter">
+            <div className="clay-success-banner text-white px-6 py-7 text-center">
+              <div className="clay-success-icon w-16 h-16 text-[#1F883D] flex items-center justify-center mx-auto mb-3">
                 <CheckCircle2 className="w-9 h-9" />
               </div>
               <span className="inline-block bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-0.5 rounded-full mb-2">
@@ -332,13 +332,13 @@ export default function PublicRegistrationPage() {
               </p>
             </div>
 
-            <div className="p-6 text-center space-y-5">
+            <div className="p-5 sm:p-6 text-center space-y-5">
               {/* 3-Angle Verified Strip */}
               <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto">
                 {['Front Profile', 'Left Angle', 'Right Angle'].map((label) => (
                   <div
                     key={label}
-                    className="bg-[#E6F6EC] border border-[#34D058]/60 text-[#1F883D] rounded-lg py-1.5 px-2 text-[11px] font-bold flex items-center justify-center gap-1"
+                    className="clay-success-pill text-[#1F883D] py-1.5 px-2 text-[11px] font-bold flex items-center justify-center gap-1"
                   >
                     <CheckCircle2 className="w-3 h-3 shrink-0" />
                     <span className="truncate">{label}</span>
@@ -346,7 +346,7 @@ export default function PublicRegistrationPage() {
                 ))}
               </div>
 
-              <div className="bg-[#F6F8FA] border border-[#D0D7DE] rounded-xl p-4 text-left max-w-sm mx-auto space-y-2 text-xs">
+              <div className="clay-inner-panel p-4 text-left max-w-sm mx-auto space-y-2 text-xs">
                 <div className="flex justify-between gap-2">
                   <span className="text-[#656D76]">Full Name</span>
                   <span className="font-bold text-[#1F2328] text-right">{fullName}</span>
@@ -415,9 +415,9 @@ export default function PublicRegistrationPage() {
             {error && (
               <div
                 role="alert"
-                className="bg-white border-2 border-[#CF222E] rounded-xl overflow-hidden shadow-md animate-enter"
+                className="clay-error-card p-2 animate-enter"
               >
-                <div className="bg-[#CF222E] text-white px-4 py-2.5 flex items-center justify-between gap-2">
+                <div className="clay-error-banner text-white px-4 py-2.5 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-bold text-xs sm:text-sm">
                     <XCircle className="w-4 h-4 shrink-0" />
                     <span>Enrollment Issue</span>
@@ -426,14 +426,14 @@ export default function PublicRegistrationPage() {
                     <button
                       type="button"
                       onClick={startCamera}
-                      className="inline-flex items-center gap-1 bg-white text-[#CF222E] px-2.5 py-1 rounded-md text-[11px] font-bold hover:bg-[#FFEBE9] transition-colors cursor-pointer"
+                      className="clay-btn inline-flex items-center gap-1 bg-white text-[#CF222E] px-3 py-1.5 text-[11px] font-bold hover:bg-[#FFF5F5] cursor-pointer"
                     >
                       <RotateCcw className="w-3 h-3" />
                       <span>Restart Capture</span>
                     </button>
                   )}
                 </div>
-                <div className="p-3.5 bg-[#FFEBE9]/40 text-xs font-medium text-[#CF222E]">
+                <div className="px-3.5 py-3 text-xs font-medium text-[#B71C1C]">
                   {error}
                 </div>
               </div>

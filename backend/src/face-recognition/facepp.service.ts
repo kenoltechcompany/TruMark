@@ -177,8 +177,8 @@ export class FacePlusPlusService implements IFaceRecognitionService {
   /**
    * Identifies a check-in selfie against enrolled students in the class in < 1.5s:
    * 1. If indexNumberHint is provided, performs an instant O(1) 1:1 /compare against that student first.
-   * 2. Otherwise attempts an O(1) Face++ /search against the class FaceSet.
-   * 3. Backfills any missing `azurePersonId` tokens and adds them to the class FaceSet automatically so subsequent check-ins are O(1).
+   * 2. Otherwise attempts an O(1) Face++ /search against the class FaceSet (lazy-syncing the FaceSet only if missing).
+   * 3. Only falls back to /compare for students missing `azurePersonId` (or if /search errored), avoiding redundant N+1 API calls.
    */
   async identifyFace(
     classId: string,
@@ -186,6 +186,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     _candidates?: CandidateStudentEmbedding[],
     indexNumberHint?: string,
   ): Promise<{ studentId?: string; personId?: string; confidence: number } | null> {
+    // Lightweight query first: avoid pulling huge base64 imagePaths & unused faceEmbedding on every check-in
     const enrolled = await this.prisma.student.findMany({
       where: { classId },
       select: {
@@ -193,19 +194,11 @@ export class FacePlusPlusService implements IFaceRecognitionService {
         fullName: true,
         indexNumber: true,
         azurePersonId: true,
-        imagePaths: true,
-        faceEmbedding: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    const orderedCandidates = enrolled.filter(
-      (s) =>
-        Boolean(s.azurePersonId) ||
-        Boolean(this.extractReferenceBase64(s.imagePaths)),
-    );
-
-    if (orderedCandidates.length === 0) {
+    if (enrolled.length === 0) {
       throw new BadRequestException(
         'No enrolled students with reference photos or Face++ tokens found in this class.',
       );
@@ -213,87 +206,120 @@ export class FacePlusPlusService implements IFaceRecognitionService {
 
     const probeBase64 = imageBuffer.toString('base64');
 
+    // Helper to lazily load imagePaths only for students that actually need /compare fallback
+    const loadImagePathsMap = async (studentIds: string[]): Promise<Map<string, string[]>> => {
+      if (studentIds.length === 0) return new Map();
+      const rows = await this.prisma.student.findMany({
+        where: { id: { in: studentIds } },
+        select: { id: true, imagePaths: true },
+      });
+      return new Map(rows.map((r) => [r.id, r.imagePaths]));
+    };
+
     // ── Fast Path 1: Instant 1:1 Verification if Index Number Hint was supplied ──
     if (indexNumberHint && indexNumberHint.trim()) {
-      const target = orderedCandidates.find(
+      const target = enrolled.find(
         (s) => s.indexNumber.toLowerCase() === indexNumberHint.trim().toLowerCase(),
       );
       if (target) {
-        const match = await this.compareSingleCandidate(classId, target, probeBase64);
+        const pathsMap = target.azurePersonId
+          ? new Map<string, string[]>()
+          : await loadImagePathsMap([target.id]);
+        const match = await this.compareSingleCandidate(
+          classId,
+          { ...target, imagePaths: pathsMap.get(target.id) || [] },
+          probeBase64,
+        );
         if (match) return match;
       }
     }
 
     // ── Fast Path 2: O(1) FaceSet /search across all students with azurePersonId ──
-    const studentsWithTokens = orderedCandidates.filter((s) => Boolean(s.azurePersonId));
-    if (studentsWithTokens.length > 0) {
+    const studentsWithTokens = enrolled.filter((s) => Boolean(s.azurePersonId));
+    let searchCompleted = false;
+
+    const syncClassFaceSet = async () => {
       const outerId = this.getOuterId(classId);
-      // Ensure existing tokens are registered in the class FaceSet once per server boot
-      if (!this.syncedFaceSets.has(classId)) {
-        try {
-          const tokenChunks: string[][] = [];
-          const allTokens = studentsWithTokens
-            .map((s) => s.azurePersonId!)
-            .filter(Boolean);
-          for (let i = 0; i < allTokens.length; i += 5) {
-            tokenChunks.push(allTokens.slice(i, i + 5));
-          }
-          for (const chunk of tokenChunks) {
-            await this.postFacePP('/faceset/create', {
-              outer_id: outerId,
-              display_name: outerId,
-              face_tokens: chunk.join(','),
-              force_merge: '1',
-            });
-          }
-          this.syncedFaceSets.add(classId);
-        } catch {
-          // Fall through if FaceSet sync fails
+      const allTokens = studentsWithTokens.map((s) => s.azurePersonId!).filter(Boolean);
+      for (let i = 0; i < allTokens.length; i += 5) {
+        await this.postFacePP('/faceset/create', {
+          outer_id: outerId,
+          display_name: outerId,
+          face_tokens: allTokens.slice(i, i + 5).join(','),
+          force_merge: '1',
+        });
+      }
+      this.syncedFaceSets.add(classId);
+    };
+
+    const runFaceSetSearch = async () => {
+      const outerId = this.getOuterId(classId);
+      const searchRes = await this.postFacePP('/search', {
+        image_base64: probeBase64,
+        outer_id: outerId,
+        return_result_count: '1',
+      });
+      searchCompleted = true;
+
+      const topResult = searchRes.results?.[0];
+      if (topResult && topResult.face_token) {
+        const confidence100 = Number(topResult.confidence || 0);
+        const strictThreshold = Number(
+          searchRes.thresholds?.['1e-5'] ??
+            searchRes.thresholds?.['1e-4'] ??
+            this.minConfidence,
+        );
+        const requiredScore = Math.max(strictThreshold, this.minConfidence);
+
+        const matchedStudent = studentsWithTokens.find(
+          (s) => s.azurePersonId === topResult.face_token,
+        );
+
+        if (matchedStudent && confidence100 >= requiredScore) {
+          this.logger.log(
+            `Face++ O(1) /search matched ${matchedStudent.fullName} (${matchedStudent.indexNumber}): confidence=${confidence100.toFixed(2)}%`,
+          );
+          return {
+            studentId: matchedStudent.id,
+            personId: matchedStudent.azurePersonId || undefined,
+            confidence: Number((confidence100 / 100).toFixed(4)),
+          };
         }
       }
+      return null;
+    };
 
+    if (studentsWithTokens.length > 0) {
       try {
-        const searchRes = await this.postFacePP('/search', {
-          image_base64: probeBase64,
-          outer_id: outerId,
-          return_result_count: '1',
-        });
-
-        const topResult = searchRes.results?.[0];
-        if (topResult && topResult.face_token) {
-          const confidence100 = Number(topResult.confidence || 0);
-          const strictThreshold = Number(
-            searchRes.thresholds?.['1e-5'] ??
-              searchRes.thresholds?.['1e-4'] ??
-              this.minConfidence,
-          );
-          const requiredScore = Math.max(strictThreshold, this.minConfidence);
-
-          const matchedStudent = studentsWithTokens.find(
-            (s) => s.azurePersonId === topResult.face_token,
-          );
-
-          if (matchedStudent && confidence100 >= requiredScore) {
-            this.logger.log(
-              `Face++ O(1) /search matched ${matchedStudent.fullName} (${matchedStudent.indexNumber}): confidence=${confidence100.toFixed(2)}%`,
-            );
-            return {
-              studentId: matchedStudent.id,
-              personId: matchedStudent.azurePersonId || undefined,
-              confidence: Number((confidence100 / 100).toFixed(4)),
-            };
-          }
-        }
+        const hit = await runFaceSetSearch();
+        if (hit) return hit;
       } catch (err: any) {
-        this.logger.warn(`Face++ /search fallback to /compare: ${err.message}`);
+        // If FaceSet doesn't exist yet on Face++ (e.g. legacy students), sync once and retry /search
+        if (!this.syncedFaceSets.has(classId) && String(err.message).includes('INVALID_OUTER_ID')) {
+          try {
+            await syncClassFaceSet();
+            const hit = await runFaceSetSearch();
+            if (hit) return hit;
+          } catch (retryErr: any) {
+            this.logger.warn(`Face++ /search retry failed: ${retryErr.message}`);
+          }
+        } else {
+          this.logger.warn(`Face++ /search fallback to /compare: ${err.message}`);
+        }
       }
     }
 
-    // ── Path 3: Compare against candidates (prioritizing students missing azurePersonId & caching their new face_token) ──
-    const candidatesToCompare = [
-      ...orderedCandidates.filter((s) => !s.azurePersonId),
-      ...orderedCandidates.filter((s) => Boolean(s.azurePersonId)),
-    ];
+    // ── Path 3: Compare ONLY against students missing azurePersonId (or all if /search failed) ──
+    const missingTokenStudents = enrolled.filter((s) => !s.azurePersonId);
+    const candidatesToCompare = searchCompleted
+      ? missingTokenStudents
+      : [...missingTokenStudents, ...studentsWithTokens];
+
+    if (candidatesToCompare.length === 0) {
+      return null;
+    }
+
+    const pathsMap = await loadImagePathsMap(candidatesToCompare.map((s) => s.id));
 
     let bestMatch: {
       studentId: string;
@@ -303,7 +329,15 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     } | null = null;
 
     for (const candidate of candidatesToCompare) {
-      const res = await this.compareSingleCandidate(classId, candidate, probeBase64);
+      const imagePaths = pathsMap.get(candidate.id) || [];
+      if (!candidate.azurePersonId && !this.extractReferenceBase64(imagePaths)) {
+        continue;
+      }
+      const res = await this.compareSingleCandidate(
+        classId,
+        { ...candidate, imagePaths },
+        probeBase64,
+      );
       if (res) {
         const conf100 = res.confidence * 100;
         if (!bestMatch || conf100 > bestMatch.confidence100) {

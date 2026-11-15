@@ -153,6 +153,97 @@
 }
 
 /* ==========================================================================
+   CLAYMORPHIC FEEDBACK CARDS (Success & Error Feedback Surfaces)
+   Plump 3D rounded surfaces with outer ambient shadow + dual inner highlights
+   ========================================================================== */
+
+.clay-success-card {
+  background: linear-gradient(155deg, #ffffff 0%, #f1fbf4 100%);
+  border: 2px solid rgba(52, 208, 88, 0.45);
+  border-radius: 26px;
+  box-shadow:
+    0 18px 38px -8px rgba(31, 136, 61, 0.22),
+    0 6px 14px rgba(31, 136, 61, 0.08),
+    inset 4px 4px 10px rgba(255, 255, 255, 0.95),
+    inset -6px -6px 14px rgba(31, 136, 61, 0.12);
+}
+
+.clay-success-banner {
+  background: linear-gradient(145deg, #28a745 0%, #1b7e35 100%);
+  border-radius: 22px;
+  box-shadow:
+    0 10px 22px rgba(27, 126, 53, 0.28),
+    inset 4px 4px 10px rgba(255, 255, 255, 0.32),
+    inset -6px -6px 14px rgba(11, 68, 26, 0.36);
+}
+
+.clay-success-icon {
+  background: linear-gradient(145deg, #ffffff 0%, #eaf9ef 100%);
+  border-radius: 9999px;
+  box-shadow:
+    0 10px 20px rgba(11, 68, 26, 0.28),
+    inset 3px 3px 6px rgba(255, 255, 255, 0.95),
+    inset -4px -4px 8px rgba(31, 136, 61, 0.18);
+}
+
+.clay-success-pill {
+  background: linear-gradient(145deg, #effcf3 0%, #dcf5e4 100%);
+  border: 1px solid rgba(52, 208, 88, 0.45);
+  border-radius: 14px;
+  box-shadow:
+    0 4px 10px rgba(31, 136, 61, 0.1),
+    inset 2px 2px 5px rgba(255, 255, 255, 0.9),
+    inset -3px -3px 6px rgba(31, 136, 61, 0.12);
+}
+
+.clay-inner-panel {
+  background: linear-gradient(145deg, #f8fafc 0%, #eef4f0 100%);
+  border: 1px solid rgba(208, 215, 222, 0.8);
+  border-radius: 18px;
+  box-shadow:
+    0 4px 12px rgba(31, 35, 40, 0.04),
+    inset 3px 3px 7px rgba(255, 255, 255, 0.9),
+    inset -3px -3px 8px rgba(163, 177, 198, 0.22);
+}
+
+.clay-error-card {
+  background: linear-gradient(155deg, #fff8f8 0%, #ffe8e8 100%);
+  border: 2px solid rgba(207, 34, 46, 0.35);
+  border-radius: 22px;
+  box-shadow:
+    0 14px 28px -6px rgba(207, 34, 46, 0.2),
+    0 4px 10px rgba(207, 34, 46, 0.08),
+    inset 4px 4px 9px rgba(255, 255, 255, 0.92),
+    inset -5px -5px 12px rgba(207, 34, 46, 0.14);
+}
+
+.clay-error-banner {
+  background: linear-gradient(145deg, #e53935 0%, #b71c1c 100%);
+  border-radius: 18px;
+  box-shadow:
+    0 8px 18px rgba(183, 28, 28, 0.26),
+    inset 3px 3px 8px rgba(255, 255, 255, 0.28),
+    inset -5px -5px 12px rgba(95, 10, 10, 0.38);
+}
+
+.clay-btn {
+  border-radius: 14px;
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.12),
+    inset 2px 2px 5px rgba(255, 255, 255, 0.5),
+    inset -3px -3px 6px rgba(0, 0, 0, 0.14);
+  transition: transform 0.14s ease, box-shadow 0.18s ease;
+}
+
+.clay-btn:hover {
+  transform: translateY(-1px);
+}
+
+.clay-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* ==========================================================================
    PURPOSEFUL ANIMATIONS (Quiet, snappy, reduced-motion safe)
    ========================================================================== */
 
