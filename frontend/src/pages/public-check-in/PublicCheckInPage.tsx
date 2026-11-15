@@ -270,15 +270,18 @@ export default function PublicCheckInPage() {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       if (video && canvas && cameraStatus === 'ready') {
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
+        const rawW = video.videoWidth || 640;
+        const rawH = video.videoHeight || 480;
+        const scale = Math.min(1, 640 / Math.max(rawW, rawH));
+        canvas.width = Math.round(rawW * scale);
+        canvas.height = Math.round(rawH * scale);
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.translate(canvas.width, 0);
           ctx.scale(-1, 1);
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const blob = await new Promise<Blob | null>((resolve) =>
-            canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9),
+            canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.82),
           );
           if (blob) {
             formData.append('image', blob, 'web-checkin.jpg');
@@ -291,7 +294,7 @@ export default function PublicCheckInPage() {
         formData,
         {
           headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 25000,
+          timeout: 60000,
         },
       );
 

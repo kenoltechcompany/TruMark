@@ -161,8 +161,11 @@ export default function PublicRegistrationPage() {
     const canvas = canvasRef.current;
     if (!video || !canvas || !cameraReady) return;
 
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const rawW = video.videoWidth || 640;
+    const rawH = video.videoHeight || 480;
+    const scale = Math.min(1, 640 / Math.max(rawW, rawH));
+    canvas.width = Math.round(rawW * scale);
+    canvas.height = Math.round(rawH * scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(video, 0, 0);

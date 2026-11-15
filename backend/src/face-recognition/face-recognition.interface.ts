@@ -39,6 +39,7 @@ export interface IFaceRecognitionService {
     classId: string,
     imageBuffer: Buffer,
     candidates?: CandidateStudentEmbedding[],
+    indexNumberHint?: string,
   ): Promise<{ studentId?: string; personId?: string; confidence: number } | null>;
 
   /**

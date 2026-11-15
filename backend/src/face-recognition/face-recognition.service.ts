@@ -57,8 +57,9 @@ export class FaceRecognitionService implements IFaceRecognitionService {
     classId: string,
     imageBuffer: Buffer,
     candidates?: CandidateStudentEmbedding[],
+    indexNumberHint?: string,
   ): Promise<{ studentId?: string; personId?: string; confidence: number } | null> {
-    return this.activeService.identifyFace(classId, imageBuffer, candidates);
+    return this.activeService.identifyFace(classId, imageBuffer, candidates, indexNumberHint);
   }
 
   syncClass(

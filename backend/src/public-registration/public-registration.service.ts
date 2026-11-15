@@ -352,6 +352,8 @@ export class PublicRegistrationService {
           const match = await this.faceRecognition.identifyFace(
             session.classId,
             options.imageBuffer,
+            undefined,
+            options.indexNumber,
           );
           if (!match || !match.studentId) {
             throw new BadRequestException('Face not recognized or confidence too low.');
@@ -361,7 +363,7 @@ export class PublicRegistrationService {
         }
       } else {
         // Face++ or Azure Face identification
-        const match = await this.faceRecognition.identifyFace(session.classId, options.imageBuffer);
+        const match = await this.faceRecognition.identifyFace(session.classId, options.imageBuffer, undefined, options.indexNumber);
         if (!match || (!match.studentId && !match.personId)) {
           throw new BadRequestException('Face not recognized or confidence too low.');
         }
