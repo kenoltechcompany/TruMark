@@ -237,6 +237,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     // ── Fast Path 2: O(1) FaceSet /search across all students with azurePersonId ──
     const studentsWithTokens = enrolled.filter((s) => Boolean(s.azurePersonId));
     let searchCompleted = false;
+    let searchFailureReason: string | null = null;
 
     const syncClassFaceSet = async () => {
       const outerId = this.getOuterId(classId);
@@ -340,20 +341,19 @@ export class FacePlusPlusService implements IFaceRecognitionService {
           };
         }
 
-        // If no missing-token students remain to check via /compare, surface exact score
+        // Record diagnostic reason; throw immediately if no missing-token students remain, or after Path 3
+        searchFailureReason = `Face confidence too low (${matchedConfidence.toFixed(1)}% vs ${requiredScore.toFixed(1)}% required). Please center your face in the oval with good lighting and try again.`;
         if (enrolled.every((s) => Boolean(s.azurePersonId))) {
-          throw new BadRequestException(
-            `Face confidence too low (${matchedConfidence.toFixed(1)}% vs ${requiredScore.toFixed(1)}% required). Please center your face in the oval with good lighting and try again.`,
-          );
+          throw new BadRequestException(searchFailureReason);
         }
       } else {
         this.logger.warn(
           `Face++ /search returned ${results.length} result(s) for outer_id=${outerId}, none matched active DB tokens`,
         );
+        searchFailureReason =
+          'Face not matched to any active enrolled profile in this class. Please re-enroll your face or enter your Index Number.';
         if (enrolled.every((s) => Boolean(s.azurePersonId))) {
-          throw new BadRequestException(
-            'Face not matched to any active enrolled profile in this class. Please re-enroll your face or enter your Index Number.',
-          );
+          throw new BadRequestException(searchFailureReason);
         }
       }
       return null;
@@ -399,6 +399,9 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       : [...missingTokenStudents, ...studentsWithTokens];
 
     if (candidatesToCompare.length === 0) {
+      if (searchFailureReason) {
+        throw new BadRequestException(searchFailureReason);
+      }
       return null;
     }
 
@@ -444,6 +447,10 @@ export class FacePlusPlusService implements IFaceRecognitionService {
         personId: bestMatch.personId,
         confidence: Number((bestMatch.confidence100 / 100).toFixed(4)),
       };
+    }
+
+    if (searchFailureReason) {
+      throw new BadRequestException(searchFailureReason);
     }
 
     return null;
