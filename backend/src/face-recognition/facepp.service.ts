@@ -347,11 +347,11 @@ export class FacePlusPlusService implements IFaceRecognitionService {
           throw new BadRequestException(searchFailureReason);
         }
       } else {
+        const resultTokens = results.map((r) => String(r?.face_token || '').slice(0, 8)).join(',');
         this.logger.warn(
-          `Face++ /search returned ${results.length} result(s) for outer_id=${outerId}, none matched active DB tokens`,
+          `Face++ /search returned ${results.length} result(s) [${resultTokens}] for outer_id=${outerId} (activeTokens=${studentsWithTokens.length}), none matched active DB tokens`,
         );
-        searchFailureReason =
-          'Face not matched to any active enrolled profile in this class. Please re-enroll your face or enter your Index Number.';
+        searchFailureReason = `Face not matched in FaceSet (results=${results.length}, active=${studentsWithTokens.length}, faces=${Array.isArray(searchRes.faces) ? searchRes.faces.length : 'n/a'}). Please re-enroll or enter your Index Number.`;
         if (enrolled.every((s) => Boolean(s.azurePersonId))) {
           throw new BadRequestException(searchFailureReason);
         }
