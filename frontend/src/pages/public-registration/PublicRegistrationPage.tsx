@@ -31,7 +31,7 @@ export default function PublicRegistrationPage() {
   const [isStartingCamera, setIsStartingCamera] = useState(false);
 
   // Hands-free Auto-Capture states
-  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(false);
   const [autoCaptureCountdown, setAutoCaptureCountdown] = useState<number | null>(null);
   const [autoCapturePaused, setAutoCapturePaused] = useState(false);
 

@@ -82,7 +82,7 @@ export default function PublicCheckInPage() {
   const [indexNumber, setIndexNumber] = useState('');
 
   // Hands-free Auto-Capture states
-  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(false);
   const [autoCaptureCountdown, setAutoCaptureCountdown] = useState<number | null>(null);
   const [autoCapturePaused, setAutoCapturePaused] = useState(false);
   const [faceDetectedHint, setFaceDetectedHint] = useState<string>('Align face inside the oval');
