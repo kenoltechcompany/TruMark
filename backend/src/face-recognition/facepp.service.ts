@@ -23,8 +23,8 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     process.env.FACEPP_API_URL ||
     'https://api-us.faceplusplus.com/facepp/v3'
   ).replace(/\/$/, '');
-  // Strict 1e-5 FAR threshold (default 74%, matching Face++ official 1e-5 threshold) to balance accuracy across lighting/angles
-  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 74);
+  // Strict threshold (default 72%, ~1e-4/1e-5 FAR on Face++) to balance accuracy across lighting/angles
+  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 72);
 
   // Global Face++ API serialization queue to prevent CONCURRENCY_LIMIT_EXCEEDED when multiple students check in simultaneously
   private apiQueue: Promise<any> = Promise.resolve();
@@ -241,11 +241,37 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     const syncClassFaceSet = async () => {
       const outerId = this.getOuterId(classId);
       const allTokens = studentsWithTokens.map((s) => s.azurePersonId!).filter(Boolean);
-      for (let i = 0; i < allTokens.length; i += 5) {
+      const validTokenSet = new Set(allTokens);
+
+      // Inspect existing FaceSet tokens so we can prune stale/re-enrolled tokens
+      let existingSet = new Set<string>();
+      try {
+        const detail = await this.postFacePP('/faceset/getdetail', { outer_id: outerId });
+        const existingTokens: string[] = Array.isArray(detail?.face_tokens)
+          ? detail.face_tokens
+          : [];
+        existingSet = new Set(existingTokens);
+
+        const staleTokens = existingTokens.filter((t) => !validTokenSet.has(t));
+        for (let i = 0; i < staleTokens.length; i += 20) {
+          await this.postFacePP('/faceset/removeface', {
+            outer_id: outerId,
+            face_tokens: staleTokens.slice(i, i + 20).join(','),
+          });
+        }
+        if (staleTokens.length > 0) {
+          this.logger.log(`Pruned ${staleTokens.length} stale face_token(s) from FaceSet ${outerId}`);
+        }
+      } catch {
+        // FaceSet does not exist yet — create below
+      }
+
+      const missingTokens = allTokens.filter((t) => !existingSet.has(t));
+      for (let i = 0; i < missingTokens.length; i += 5) {
         await this.postFacePP('/faceset/create', {
           outer_id: outerId,
           display_name: outerId,
-          face_tokens: allTokens.slice(i, i + 5).join(','),
+          face_tokens: missingTokens.slice(i, i + 5).join(','),
           force_merge: '1',
         });
       }
@@ -257,7 +283,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       const searchRes = await this.postFacePP('/search', {
         image_base64: probeBase64,
         outer_id: outerId,
-        return_result_count: '1',
+        return_result_count: '5',
       });
       searchCompleted = true;
 
@@ -267,33 +293,54 @@ export class FacePlusPlusService implements IFaceRecognitionService {
         );
       }
 
-      const topResult = searchRes.results?.[0];
-      if (topResult && topResult.face_token) {
-        const confidence100 = Number(topResult.confidence || 0);
-        const strictThreshold = Number(
-          searchRes.thresholds?.['1e-5'] ??
-            searchRes.thresholds?.['1e-4'] ??
-            this.minConfidence,
-        );
-        const requiredScore = Math.max(strictThreshold, this.minConfidence);
+      const results: any[] = Array.isArray(searchRes.results) ? searchRes.results : [];
+      const strictThreshold = Number(
+        searchRes.thresholds?.['1e-5'] ??
+          searchRes.thresholds?.['1e-4'] ??
+          this.minConfidence,
+      );
+      const requiredScore = Math.max(strictThreshold, this.minConfidence);
 
-        const matchedStudent = studentsWithTokens.find(
-          (s) => s.azurePersonId === topResult.face_token,
-        );
+      // Find the highest-confidence result whose face_token belongs to an active student
+      let matchedStudent: (typeof studentsWithTokens)[number] | undefined;
+      let matchedConfidence = 0;
+      const orphanedTokens: string[] = [];
 
+      for (const r of results) {
+        if (!r?.face_token) continue;
+        const owner = studentsWithTokens.find((s) => s.azurePersonId === r.face_token);
+        if (!owner) {
+          orphanedTokens.push(r.face_token);
+          continue;
+        }
+        if (!matchedStudent) {
+          matchedStudent = owner;
+          matchedConfidence = Number(r.confidence || 0);
+        }
+      }
+
+      // Clean up any orphaned tokens in the background so they don't pollute future searches
+      if (orphanedTokens.length > 0) {
+        this.postFacePP('/faceset/removeface', {
+          outer_id: outerId,
+          face_tokens: orphanedTokens.join(','),
+        }).catch(() => {});
+      }
+
+      if (matchedStudent) {
         this.logger.log(
-          `Face++ /search top result: student=${matchedStudent ? `${matchedStudent.fullName} (${matchedStudent.indexNumber})` : 'unknown_token'}, confidence=${confidence100.toFixed(2)}%, required=${requiredScore.toFixed(2)}%`,
+          `Face++ /search best active match: student=${matchedStudent.fullName} (${matchedStudent.indexNumber}), confidence=${matchedConfidence.toFixed(2)}%, required=${requiredScore.toFixed(2)}%`,
         );
 
-        if (matchedStudent && confidence100 >= requiredScore) {
+        if (matchedConfidence >= requiredScore) {
           return {
             studentId: matchedStudent.id,
             personId: matchedStudent.azurePersonId || undefined,
-            confidence: Number((confidence100 / 100).toFixed(4)),
+            confidence: Number((matchedConfidence / 100).toFixed(4)),
           };
         }
       } else {
-        this.logger.warn(`Face++ /search returned 0 results for outer_id=${outerId}`);
+        this.logger.warn(`Face++ /search returned ${results.length} result(s) for outer_id=${outerId}, none matched active DB tokens`);
       }
       return null;
     };
