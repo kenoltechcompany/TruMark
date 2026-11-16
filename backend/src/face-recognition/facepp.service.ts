@@ -23,8 +23,8 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     process.env.FACEPP_API_URL ||
     'https://api-us.faceplusplus.com/facepp/v3'
   ).replace(/\/$/, '');
-  // Strict threshold (default 72%, ~1e-4/1e-5 FAR on Face++) to balance accuracy across lighting/angles
-  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 72);
+  // Strict threshold (default 70%, ~1e-4 FAR on Face++) to balance accuracy across mobile lighting/angles
+  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 70);
 
   // Global Face++ API serialization queue to prevent CONCURRENCY_LIMIT_EXCEEDED when multiple students check in simultaneously
   private apiQueue: Promise<any> = Promise.resolve();
@@ -295,8 +295,8 @@ export class FacePlusPlusService implements IFaceRecognitionService {
 
       const results: any[] = Array.isArray(searchRes.results) ? searchRes.results : [];
       const strictThreshold = Number(
-        searchRes.thresholds?.['1e-5'] ??
-          searchRes.thresholds?.['1e-4'] ??
+        searchRes.thresholds?.['1e-4'] ??
+          searchRes.thresholds?.['1e-5'] ??
           this.minConfidence,
       );
       const requiredScore = Math.max(strictThreshold, this.minConfidence);
@@ -339,8 +339,22 @@ export class FacePlusPlusService implements IFaceRecognitionService {
             confidence: Number((matchedConfidence / 100).toFixed(4)),
           };
         }
+
+        // If no missing-token students remain to check via /compare, surface exact score
+        if (enrolled.every((s) => Boolean(s.azurePersonId))) {
+          throw new BadRequestException(
+            `Face confidence too low (${matchedConfidence.toFixed(1)}% vs ${requiredScore.toFixed(1)}% required). Please center your face in the oval with good lighting and try again.`,
+          );
+        }
       } else {
-        this.logger.warn(`Face++ /search returned ${results.length} result(s) for outer_id=${outerId}, none matched active DB tokens`);
+        this.logger.warn(
+          `Face++ /search returned ${results.length} result(s) for outer_id=${outerId}, none matched active DB tokens`,
+        );
+        if (enrolled.every((s) => Boolean(s.azurePersonId))) {
+          throw new BadRequestException(
+            'Face not matched to any active enrolled profile in this class. Please re-enroll your face or enter your Index Number.',
+          );
+        }
       }
       return null;
     };

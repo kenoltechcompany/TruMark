@@ -296,8 +296,7 @@ export default function PublicCheckInPage() {
         canvas.height = Math.round(rawH * scale);
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
+          // Match enrollment orientation (unmirrored raw camera frame) for consistent Face++ matching
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const blob = await new Promise<Blob | null>((resolve) =>
             canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.82),
