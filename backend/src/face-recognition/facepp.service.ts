@@ -288,13 +288,14 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       });
       searchCompleted = true;
 
-      if (Array.isArray(searchRes.faces) && searchRes.faces.length === 0) {
+      const results: any[] = Array.isArray(searchRes.results) ? searchRes.results : [];
+
+      if ((Array.isArray(searchRes.faces) && searchRes.faces.length === 0) || (!searchRes.thresholds && results.length === 0)) {
         throw new BadRequestException(
-          'No clear face detected in the camera frame. Please center your face inside the oval with good lighting.',
+          'No clear face detected in the camera frame. Please tilt your camera or sit back so your eyes, nose, and mouth are all inside the oval.',
         );
       }
 
-      const results: any[] = Array.isArray(searchRes.results) ? searchRes.results : [];
       const strictThreshold = Number(
         searchRes.thresholds?.['1e-4'] ??
           searchRes.thresholds?.['1e-5'] ??
