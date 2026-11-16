@@ -23,8 +23,8 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     process.env.FACEPP_API_URL ||
     'https://api-us.faceplusplus.com/facepp/v3'
   ).replace(/\/$/, '');
-  // Strict 1e-5 FAR threshold (default 80%) to prevent false-positive matches across students
-  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 80);
+  // Strict 1e-5 FAR threshold (default 74%, matching Face++ official 1e-5 threshold) to balance accuracy across lighting/angles
+  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 74);
 
   // Global Face++ API serialization queue to prevent CONCURRENCY_LIMIT_EXCEEDED when multiple students check in simultaneously
   private apiQueue: Promise<any> = Promise.resolve();
@@ -261,6 +261,12 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       });
       searchCompleted = true;
 
+      if (Array.isArray(searchRes.faces) && searchRes.faces.length === 0) {
+        throw new BadRequestException(
+          'No clear face detected in the camera frame. Please center your face inside the oval with good lighting.',
+        );
+      }
+
       const topResult = searchRes.results?.[0];
       if (topResult && topResult.face_token) {
         const confidence100 = Number(topResult.confidence || 0);
@@ -275,32 +281,48 @@ export class FacePlusPlusService implements IFaceRecognitionService {
           (s) => s.azurePersonId === topResult.face_token,
         );
 
+        this.logger.log(
+          `Face++ /search top result: student=${matchedStudent ? `${matchedStudent.fullName} (${matchedStudent.indexNumber})` : 'unknown_token'}, confidence=${confidence100.toFixed(2)}%, required=${requiredScore.toFixed(2)}%`,
+        );
+
         if (matchedStudent && confidence100 >= requiredScore) {
-          this.logger.log(
-            `Face++ O(1) /search matched ${matchedStudent.fullName} (${matchedStudent.indexNumber}): confidence=${confidence100.toFixed(2)}%`,
-          );
           return {
             studentId: matchedStudent.id,
             personId: matchedStudent.azurePersonId || undefined,
             confidence: Number((confidence100 / 100).toFixed(4)),
           };
         }
+      } else {
+        this.logger.warn(`Face++ /search returned 0 results for outer_id=${outerId}`);
       }
       return null;
     };
 
     if (studentsWithTokens.length > 0) {
+      // Ensure class FaceSet has all current student tokens once per server boot
+      if (!this.syncedFaceSets.has(classId)) {
+        try {
+          await syncClassFaceSet();
+        } catch (syncErr: any) {
+          this.logger.warn(`FaceSet boot sync warning: ${syncErr.message}`);
+        }
+      }
+
       try {
         const hit = await runFaceSetSearch();
         if (hit) return hit;
       } catch (err: any) {
+        if (err instanceof BadRequestException) {
+          throw err;
+        }
         // If FaceSet doesn't exist yet on Face++ (e.g. legacy students), sync once and retry /search
-        if (!this.syncedFaceSets.has(classId) && String(err.message).includes('INVALID_OUTER_ID')) {
+        if (String(err.message).includes('INVALID_OUTER_ID')) {
           try {
             await syncClassFaceSet();
             const hit = await runFaceSetSearch();
             if (hit) return hit;
           } catch (retryErr: any) {
+            if (retryErr instanceof BadRequestException) throw retryErr;
             this.logger.warn(`Face++ /search retry failed: ${retryErr.message}`);
           }
         } else {

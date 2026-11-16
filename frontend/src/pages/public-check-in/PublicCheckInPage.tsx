@@ -367,6 +367,7 @@ export default function PublicCheckInPage() {
     const initAutoCapture = async () => {
       // If browser supports FaceDetector API (Chrome / Android / Edge), wait until a face is visible
       const FaceDetectorCtor = (window as any).FaceDetector;
+      let detectedViaApi = false;
       if (FaceDetectorCtor && videoRef.current) {
         try {
           const detector = new FaceDetectorCtor({ fastMode: true, maxDetectedFaces: 1 });
@@ -376,6 +377,7 @@ export default function PublicCheckInPage() {
             if (video && video.readyState >= 2 && video.videoWidth > 0) {
               const faces = await detector.detect(video).catch(() => []);
               if (faces && faces.length > 0) {
+                detectedViaApi = true;
                 break;
               }
             }
@@ -387,9 +389,11 @@ export default function PublicCheckInPage() {
       }
 
       if (cancelled) return;
-      setFaceDetectedHint('Face aligned! Hold still...');
+      setFaceDetectedHint(
+        detectedViaApi ? 'Face aligned! Hold still...' : 'Center face in oval...',
+      );
 
-      let remaining = 3;
+      let remaining = detectedViaApi ? 3 : 4;
       setAutoCaptureCountdown(remaining);
 
       countdownTimer = setInterval(() => {
