@@ -175,10 +175,10 @@ export class FacePlusPlusService implements IFaceRecognitionService {
   }
 
   /**
-   * Identifies a check-in selfie against enrolled students in the class in < 1.5s:
-   * 1. If indexNumberHint is provided, performs an instant O(1) 1:1 /compare against that student first.
-   * 2. Otherwise attempts an O(1) Face++ /search against the class FaceSet (lazy-syncing the FaceSet only if missing).
-   * 3. Only falls back to /compare for students missing `azurePersonId` (or if /search errored), avoiding redundant N+1 API calls.
+   * Identifies a check-in selfie against enrolled students in the class:
+   * 1. Calls /detect ONCE on the probe selfie to validate a clear face exists and get a lightweight `probeFaceToken`.
+   * 2. If indexNumberHint is provided, performs an instant O(1) 1:1 /compare against that student.
+   * 3. Attempts Face++ /search using `probeFaceToken`; if /search returns empty/unmatched, falls back to fast token-to-token /compare (prioritizing newest & tokenized students, short-circuiting at >= 80%).
    */
   async identifyFace(
     classId: string,
@@ -186,7 +186,6 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     _candidates?: CandidateStudentEmbedding[],
     indexNumberHint?: string,
   ): Promise<{ studentId?: string; personId?: string; confidence: number } | null> {
-    // Lightweight query first: avoid pulling huge base64 imagePaths & unused faceEmbedding on every check-in
     const enrolled = await this.prisma.student.findMany({
       where: { classId },
       select: {
@@ -206,7 +205,19 @@ export class FacePlusPlusService implements IFaceRecognitionService {
 
     const probeBase64 = imageBuffer.toString('base64');
 
-    // Helper to lazily load imagePaths only for students that actually need /compare fallback
+    // Step 1: Validate probe image via Face++ /detect once (~200ms) to get a lightweight face_token
+    const detectRes = await this.postFacePP('/detect', {
+      image_base64: probeBase64,
+    });
+    const detectedFaces: any[] = Array.isArray(detectRes.faces) ? detectRes.faces : [];
+    if (detectedFaces.length === 0 || !detectedFaces[0]?.face_token) {
+      throw new BadRequestException(
+        'No clear face detected in the camera frame. Please tilt your camera or sit back so your eyes, nose, and mouth are all inside the oval.',
+      );
+    }
+    const probeFaceToken: string = detectedFaces[0].face_token;
+
+    // Helper to lazily load imagePaths only when a student lacks a valid azurePersonId
     const loadImagePathsMap = async (studentIds: string[]): Promise<Map<string, string[]>> => {
       if (studentIds.length === 0) return new Map();
       const rows = await this.prisma.student.findMany({
@@ -229,184 +240,64 @@ export class FacePlusPlusService implements IFaceRecognitionService {
           classId,
           { ...target, imagePaths: pathsMap.get(target.id) || [] },
           probeBase64,
+          probeFaceToken,
         );
         if (match) return match;
       }
     }
 
-    // ── Fast Path 2: O(1) FaceSet /search across all students with azurePersonId ──
+    // ── Fast Path 2: O(1) FaceSet /search using probeFaceToken ──
     const studentsWithTokens = enrolled.filter((s) => Boolean(s.azurePersonId));
-    let searchCompleted = false;
-    let searchFailureReason: string | null = null;
-
-    const syncClassFaceSet = async () => {
-      const outerId = this.getOuterId(classId);
-      const allTokens = studentsWithTokens.map((s) => s.azurePersonId!).filter(Boolean);
-      const validTokenSet = new Set(allTokens);
-
-      // Inspect existing FaceSet tokens so we can prune stale/re-enrolled tokens
-      let existingSet = new Set<string>();
-      try {
-        const detail = await this.postFacePP('/faceset/getdetail', { outer_id: outerId });
-        const existingTokens: string[] = Array.isArray(detail?.face_tokens)
-          ? detail.face_tokens
-          : [];
-        existingSet = new Set(existingTokens);
-
-        const staleTokens = existingTokens.filter((t) => !validTokenSet.has(t));
-        for (let i = 0; i < staleTokens.length; i += 20) {
-          await this.postFacePP('/faceset/removeface', {
-            outer_id: outerId,
-            face_tokens: staleTokens.slice(i, i + 20).join(','),
-          });
-        }
-        if (staleTokens.length > 0) {
-          this.logger.log(`Pruned ${staleTokens.length} stale face_token(s) from FaceSet ${outerId}`);
-        }
-      } catch {
-        // FaceSet does not exist yet — create below
-      }
-
-      const missingTokens = allTokens.filter((t) => !existingSet.has(t));
-      for (let i = 0; i < missingTokens.length; i += 5) {
-        await this.postFacePP('/faceset/create', {
-          outer_id: outerId,
-          display_name: outerId,
-          face_tokens: missingTokens.slice(i, i + 5).join(','),
-          force_merge: '1',
-        });
-      }
-      this.syncedFaceSets.add(classId);
-    };
-
-    const runFaceSetSearch = async () => {
-      const outerId = this.getOuterId(classId);
-      const searchRes = await this.postFacePP('/search', {
-        image_base64: probeBase64,
-        outer_id: outerId,
-        return_result_count: '5',
-      });
-      searchCompleted = true;
-
-      const results: any[] = Array.isArray(searchRes.results) ? searchRes.results : [];
-
-      if ((Array.isArray(searchRes.faces) && searchRes.faces.length === 0) || (!searchRes.thresholds && results.length === 0)) {
-        throw new BadRequestException(
-          'No clear face detected in the camera frame. Please tilt your camera or sit back so your eyes, nose, and mouth are all inside the oval.',
-        );
-      }
-
-      const strictThreshold = Number(
-        searchRes.thresholds?.['1e-4'] ??
-          searchRes.thresholds?.['1e-5'] ??
-          this.minConfidence,
-      );
-      const requiredScore = Math.max(strictThreshold, this.minConfidence);
-
-      // Find the highest-confidence result whose face_token belongs to an active student
-      let matchedStudent: (typeof studentsWithTokens)[number] | undefined;
-      let matchedConfidence = 0;
-      const orphanedTokens: string[] = [];
-
-      for (const r of results) {
-        if (!r?.face_token) continue;
-        const owner = studentsWithTokens.find((s) => s.azurePersonId === r.face_token);
-        if (!owner) {
-          orphanedTokens.push(r.face_token);
-          continue;
-        }
-        if (!matchedStudent) {
-          matchedStudent = owner;
-          matchedConfidence = Number(r.confidence || 0);
-        }
-      }
-
-      // Clean up any orphaned tokens in the background so they don't pollute future searches
-      if (orphanedTokens.length > 0) {
-        this.postFacePP('/faceset/removeface', {
-          outer_id: outerId,
-          face_tokens: orphanedTokens.join(','),
-        }).catch(() => {});
-      }
-
-      if (matchedStudent) {
-        this.logger.log(
-          `Face++ /search best active match: student=${matchedStudent.fullName} (${matchedStudent.indexNumber}), confidence=${matchedConfidence.toFixed(2)}%, required=${requiredScore.toFixed(2)}%`,
-        );
-
-        if (matchedConfidence >= requiredScore) {
-          return {
-            studentId: matchedStudent.id,
-            personId: matchedStudent.azurePersonId || undefined,
-            confidence: Number((matchedConfidence / 100).toFixed(4)),
-          };
-        }
-
-        // Record diagnostic reason; throw immediately if no missing-token students remain, or after Path 3
-        searchFailureReason = `Face confidence too low (${matchedConfidence.toFixed(1)}% vs ${requiredScore.toFixed(1)}% required). Please center your face in the oval with good lighting and try again.`;
-        if (enrolled.every((s) => Boolean(s.azurePersonId))) {
-          throw new BadRequestException(searchFailureReason);
-        }
-      } else {
-        const resultTokens = results.map((r) => String(r?.face_token || '').slice(0, 8)).join(',');
-        this.logger.warn(
-          `Face++ /search returned ${results.length} result(s) [${resultTokens}] for outer_id=${outerId} (activeTokens=${studentsWithTokens.length}), none matched active DB tokens`,
-        );
-        searchFailureReason = `Face not matched in FaceSet (results=${results.length}, active=${studentsWithTokens.length}, faces=${Array.isArray(searchRes.faces) ? searchRes.faces.length : 'n/a'}). Please re-enroll or enter your Index Number.`;
-        if (enrolled.every((s) => Boolean(s.azurePersonId))) {
-          throw new BadRequestException(searchFailureReason);
-        }
-      }
-      return null;
-    };
+    let highestSearchConfidence = 0;
 
     if (studentsWithTokens.length > 0) {
-      // Ensure class FaceSet has all current student tokens once per server boot
-      if (!this.syncedFaceSets.has(classId)) {
-        try {
-          await syncClassFaceSet();
-        } catch (syncErr: any) {
-          this.logger.warn(`FaceSet boot sync warning: ${syncErr.message}`);
-        }
-      }
-
+      const outerId = this.getOuterId(classId);
       try {
-        const hit = await runFaceSetSearch();
-        if (hit) return hit;
-      } catch (err: any) {
-        if (err instanceof BadRequestException) {
-          throw err;
-        }
-        // If FaceSet doesn't exist yet on Face++ (e.g. legacy students), sync once and retry /search
-        if (String(err.message).includes('INVALID_OUTER_ID')) {
-          try {
-            await syncClassFaceSet();
-            const hit = await runFaceSetSearch();
-            if (hit) return hit;
-          } catch (retryErr: any) {
-            if (retryErr instanceof BadRequestException) throw retryErr;
-            this.logger.warn(`Face++ /search retry failed: ${retryErr.message}`);
+        const searchRes = await this.postFacePP('/search', {
+          face_token: probeFaceToken,
+          outer_id: outerId,
+          return_result_count: '5',
+        });
+
+        const results: any[] = Array.isArray(searchRes.results) ? searchRes.results : [];
+        const strictThreshold = Number(
+          searchRes.thresholds?.['1e-4'] ??
+            searchRes.thresholds?.['1e-5'] ??
+            this.minConfidence,
+        );
+        const requiredScore = Math.max(strictThreshold, this.minConfidence);
+
+        for (const r of results) {
+          if (!r?.face_token) continue;
+          const owner = studentsWithTokens.find((s) => s.azurePersonId === r.face_token);
+          if (!owner) continue;
+          const conf = Number(r.confidence || 0);
+          if (conf > highestSearchConfidence) highestSearchConfidence = conf;
+          if (conf >= requiredScore) {
+            this.logger.log(
+              `Face++ /search matched ${owner.fullName} (${owner.indexNumber}): confidence=${conf.toFixed(2)}%`,
+            );
+            return {
+              studentId: owner.id,
+              personId: owner.azurePersonId || undefined,
+              confidence: Number((conf / 100).toFixed(4)),
+            };
           }
-        } else {
-          this.logger.warn(`Face++ /search fallback to /compare: ${err.message}`);
         }
+      } catch (err: any) {
+        this.logger.warn(`Face++ /search fallback to /compare: ${err.message}`);
       }
     }
 
-    // ── Path 3: Compare ONLY against students missing azurePersonId (or all if /search failed) ──
-    const missingTokenStudents = enrolled.filter((s) => !s.azurePersonId);
-    const candidatesToCompare = searchCompleted
-      ? missingTokenStudents
-      : [...missingTokenStudents, ...studentsWithTokens];
+    // ── Path 3: Fast token-to-token /compare fallback (when /search returns empty or no match) ──
+    // Prioritize students WITH azurePersonId (token-to-token ~200ms/call) then students without tokens
+    const candidatesToCompare = [
+      ...studentsWithTokens,
+      ...enrolled.filter((s) => !s.azurePersonId),
+    ];
 
-    if (candidatesToCompare.length === 0) {
-      if (searchFailureReason) {
-        throw new BadRequestException(searchFailureReason);
-      }
-      return null;
-    }
-
-    const pathsMap = await loadImagePathsMap(candidatesToCompare.map((s) => s.id));
+    const missingTokenIds = enrolled.filter((s) => !s.azurePersonId).map((s) => s.id);
+    const pathsMap = await loadImagePathsMap(missingTokenIds);
 
     let bestMatch: {
       studentId: string;
@@ -414,6 +305,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       personId?: string;
       confidence100: number;
     } | null = null;
+    let highestSeenConfidence = highestSearchConfidence;
 
     for (const candidate of candidatesToCompare) {
       const imagePaths = pathsMap.get(candidate.id) || [];
@@ -424,6 +316,10 @@ export class FacePlusPlusService implements IFaceRecognitionService {
         classId,
         { ...candidate, imagePaths },
         probeBase64,
+        probeFaceToken,
+        (seenConf) => {
+          if (seenConf > highestSeenConfidence) highestSeenConfidence = seenConf;
+        },
       );
       if (res) {
         const conf100 = res.confidence * 100;
@@ -435,8 +331,8 @@ export class FacePlusPlusService implements IFaceRecognitionService {
             confidence100: conf100,
           };
         }
-        // Short-circuit immediately on >= 86% confidence to keep latency low
-        if (conf100 >= 86) {
+        // Short-circuit immediately on >= 80% confidence to keep latency minimal
+        if (conf100 >= 80) {
           break;
         }
       }
@@ -450,15 +346,17 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       };
     }
 
-    if (searchFailureReason) {
-      throw new BadRequestException(searchFailureReason);
+    if (highestSeenConfidence > 0) {
+      throw new BadRequestException(
+        `Face confidence too low (best match ${highestSeenConfidence.toFixed(1)}% vs ${this.minConfidence.toFixed(1)}% required). Please center your face in good lighting and try again.`,
+      );
     }
 
     return null;
   }
 
   /**
-   * Compares a single candidate against the probe selfie and automatically caches `face_token1` into `azurePersonId` + class FaceSet if missing.
+   * Compares a single candidate against the probe selfie (using `probeFaceToken` when available) and automatically caches `face_token1` if missing.
    */
   private async compareSingleCandidate(
     classId: string,
@@ -470,18 +368,20 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       imagePaths: string[];
     },
     probeBase64: string,
+    probeFaceToken?: string,
+    onConfidenceSeen?: (confidence100: number) => void,
   ): Promise<{ studentId: string; personId?: string; confidence: number } | null> {
-    const refBase64 = this.extractReferenceBase64(candidate.imagePaths);
-    const compareParams: Record<string, string> = {
-      image_base64_2: probeBase64,
-    };
+    const compareParams: Record<string, string> = probeFaceToken
+      ? { face_token2: probeFaceToken }
+      : { image_base64_2: probeBase64 };
 
+    let refBase64: string | null = null;
     if (candidate.azurePersonId) {
       compareParams.face_token1 = candidate.azurePersonId;
-    } else if (refBase64) {
-      compareParams.image_base64_1 = refBase64;
     } else {
-      return null;
+      refBase64 = this.extractReferenceBase64(candidate.imagePaths);
+      if (!refBase64) return null;
+      compareParams.image_base64_1 = refBase64;
     }
 
     try {
@@ -489,11 +389,22 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       try {
         cmpRes = await this.postFacePP('/compare', compareParams);
       } catch (innerErr: any) {
-        // If stored face_token1 expired on Face++, retry using raw reference base64 image
-        if (candidate.azurePersonId && refBase64) {
-          delete compareParams.face_token1;
-          compareParams.image_base64_1 = refBase64;
-          cmpRes = await this.postFacePP('/compare', compareParams);
+        // If stored face_token1 expired on Face++, lazily fetch imagePaths and retry with image_base64_1
+        if (candidate.azurePersonId) {
+          if (!refBase64) {
+            const row = await this.prisma.student.findUnique({
+              where: { id: candidate.id },
+              select: { imagePaths: true },
+            });
+            refBase64 = this.extractReferenceBase64(row?.imagePaths);
+          }
+          if (refBase64) {
+            delete compareParams.face_token1;
+            compareParams.image_base64_1 = refBase64;
+            cmpRes = await this.postFacePP('/compare', compareParams);
+          } else {
+            throw innerErr;
+          }
         } else {
           throw innerErr;
         }
@@ -513,8 +424,10 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       }
 
       const confidence100 = Number(cmpRes.confidence || 0);
+      if (onConfidenceSeen) onConfidenceSeen(confidence100);
+
       const strictThreshold = Number(
-        cmpRes.thresholds?.['1e-5'] ?? cmpRes.thresholds?.['1e-4'] ?? this.minConfidence,
+        cmpRes.thresholds?.['1e-4'] ?? cmpRes.thresholds?.['1e-5'] ?? this.minConfidence,
       );
       const requiredScore = Math.max(strictThreshold, this.minConfidence);
 
