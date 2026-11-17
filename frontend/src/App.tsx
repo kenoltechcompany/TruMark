@@ -15,6 +15,7 @@ import AdminsPage from './pages/admins/AdminsPage';
 import SettingsPage from './pages/settings/SettingsPage';
 import PublicRegistrationPage from './pages/public-registration/PublicRegistrationPage';
 import PublicCheckInPage from './pages/public-check-in/PublicCheckInPage';
+import FaceTestPage from './pages/face-test/FaceTestPage';
 import LandingPage from './pages/LandingPage';
 import type { ReactNode } from 'react';
 
@@ -78,6 +79,7 @@ export default function App() {
             <Route path="/public/register/:classId" element={<PublicRegistrationPage />} />
             <Route path="/check-in" element={<PublicCheckInPage />} />
             <Route path="/check-in/:sessionId" element={<PublicCheckInPage />} />
+            <Route path="/face-test" element={<FaceTestPage />} />
 
             {/* Admin routes */}
             <Route

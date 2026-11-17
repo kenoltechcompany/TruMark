@@ -122,4 +122,33 @@ export class PublicRegistrationController {
       indexNumber: dto.indexNumber,
     });
   }
+
+  @Post('face-test/detect')
+  @Throttle({ default: { limit: 15, ttl: 60000 } })
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      fileFilter: imageFileFilter,
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async testDetect(@UploadedFile() file?: Express.Multer.File) {
+    return this.service.testDetectFace(file?.buffer);
+  }
+
+  @Post('face-test/compare')
+  @Throttle({ default: { limit: 15, ttl: 60000 } })
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: memoryStorage(),
+      fileFilter: imageFileFilter,
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async testCompare(
+    @Body('faceToken1') faceToken1?: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.service.testCompareFace(faceToken1, file?.buffer);
+  }
 }

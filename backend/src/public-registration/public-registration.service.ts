@@ -505,4 +505,21 @@ export class PublicRegistrationService {
   private toRad(deg: number): number {
     return (deg * Math.PI) / 180;
   }
+
+  async testDetectFace(imageBuffer?: Buffer) {
+    if (!imageBuffer) {
+      throw new BadRequestException('An image file is required.');
+    }
+    return this.faceRecognition.testDetectFace(imageBuffer);
+  }
+
+  async testCompareFace(faceToken1?: string, imageBuffer2?: Buffer) {
+    if (!faceToken1 || !faceToken1.trim()) {
+      throw new BadRequestException('Reference faceToken1 is required.');
+    }
+    if (!imageBuffer2) {
+      throw new BadRequestException('A comparison selfie image is required.');
+    }
+    return this.faceRecognition.testCompareFace(faceToken1.trim(), imageBuffer2);
+  }
 }
