@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useFaceOvalAlignment } from '../../hooks/useFaceOvalAlignment';
 import {
   QrCode,
   MapPin,
@@ -81,11 +82,9 @@ export default function PublicCheckInPage() {
   const [submitError, setSubmitError] = useState('');
   const [indexNumber, setIndexNumber] = useState('');
 
-  // Hands-free Auto-Capture states
-  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(false);
-  const [autoCaptureCountdown, setAutoCaptureCountdown] = useState<number | null>(null);
+  // Hands-free Auto-Capture states (oval stays red until face is centered, turns green for 4s then captures)
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
   const [autoCapturePaused, setAutoCapturePaused] = useState(false);
-  const [faceDetectedHint, setFaceDetectedHint] = useState<string>('Align face inside the oval');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -100,7 +99,6 @@ export default function PublicCheckInPage() {
     setCheckInResult(null);
     setSubmitError('');
     setAutoCapturePaused(false);
-    setAutoCaptureCountdown(null);
 
     try {
       const res = await apiClient.get<SessionData>(`/public/sessions/${id.trim()}`);
@@ -274,7 +272,6 @@ export default function PublicCheckInPage() {
     captureInFlightRef.current = true;
     setIsSubmitting(true);
     setSubmitError('');
-    setAutoCaptureCountdown(null);
 
     try {
       const formData = new FormData();
@@ -342,92 +339,27 @@ export default function PublicCheckInPage() {
     indexNumber,
   ]);
 
-  // Hands-free automatic capture countdown when camera & geofence are ready
-  useEffect(() => {
-    const canAutoCapture =
-      Boolean(session?.isActive) &&
-      !checkInResult &&
-      isBiometricActive &&
-      cameraStatus === 'ready' &&
-      (!isGeofenceActive || (locationStatus === 'ready' && isWithinGeofence)) &&
-      autoCaptureEnabled &&
-      !autoCapturePaused &&
-      !isSubmitting &&
-      !submitError;
+  // Real-time face-in-oval alignment: red until face is centered inside oval, green -> 4s hold -> auto-capture
+  const canDetectOval =
+    Boolean(session?.isActive) &&
+    !checkInResult &&
+    isBiometricActive &&
+    cameraStatus === 'ready' &&
+    (!isGeofenceActive || (locationStatus === 'ready' && isWithinGeofence)) &&
+    !isSubmitting &&
+    !submitError;
 
-    if (!canAutoCapture) {
-      setAutoCaptureCountdown(null);
-      return;
-    }
-
-    let cancelled = false;
-    let countdownTimer: ReturnType<typeof setInterval> | null = null;
-
-    const initAutoCapture = async () => {
-      // If browser supports FaceDetector API (Chrome / Android / Edge), wait until a face is visible
-      const FaceDetectorCtor = (window as any).FaceDetector;
-      let detectedViaApi = false;
-      if (FaceDetectorCtor && videoRef.current) {
-        try {
-          const detector = new FaceDetectorCtor({ fastMode: true, maxDetectedFaces: 1 });
-          setFaceDetectedHint('Looking for your face...');
-          while (!cancelled) {
-            const video = videoRef.current;
-            if (video && video.readyState >= 2 && video.videoWidth > 0) {
-              const faces = await detector.detect(video).catch(() => []);
-              if (faces && faces.length > 0) {
-                detectedViaApi = true;
-                break;
-              }
-            }
-            await new Promise((r) => setTimeout(r, 350));
-          }
-        } catch {
-          // Fall through to standard timer if FaceDetector throws
-        }
-      }
-
-      if (cancelled) return;
-      setFaceDetectedHint(
-        detectedViaApi ? 'Face aligned! Hold still...' : 'Center face in oval...',
-      );
-
-      let remaining = detectedViaApi ? 3 : 4;
-      setAutoCaptureCountdown(remaining);
-
-      countdownTimer = setInterval(() => {
-        if (cancelled) return;
-        remaining -= 1;
-        if (remaining <= 0) {
-          if (countdownTimer) clearInterval(countdownTimer);
-          setAutoCaptureCountdown(null);
-          handleCaptureAndCheckIn();
-        } else {
-          setAutoCaptureCountdown(remaining);
-        }
-      }, 950);
-    };
-
-    initAutoCapture();
-
-    return () => {
-      cancelled = true;
-      if (countdownTimer) clearInterval(countdownTimer);
-    };
-  }, [
-    session?.isActive,
-    checkInResult,
-    isBiometricActive,
-    cameraStatus,
-    isGeofenceActive,
-    locationStatus,
-    isWithinGeofence,
-    autoCaptureEnabled,
-    autoCapturePaused,
-    isSubmitting,
-    submitError,
-    handleCaptureAndCheckIn,
-  ]);
+  const {
+    isFaceAligned,
+    alignmentHint: faceDetectedHint,
+    countdownSeconds: autoCaptureCountdown,
+  } = useFaceOvalAlignment({
+    videoRef,
+    active: canDetectOval,
+    autoCaptureEnabled: autoCaptureEnabled && !autoCapturePaused,
+    holdSeconds: 4,
+    onAutoCapture: handleCaptureAndCheckIn,
+  });
 
   const handleManualSessionLookup = (e: React.FormEvent) => {
     e.preventDefault();
@@ -776,38 +708,54 @@ export default function PublicCheckInPage() {
                     </div>
                   )}
 
-                  {/* Biometric Face Alignment Overlay + Scan Line */}
+                  {/* Biometric Face Alignment Overlay + Scan Line (Red until face centered, Green when aligned) */}
                   {isBiometricActive && (
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                       <div
-                        className={`relative w-40 h-52 sm:w-48 sm:h-64 border-2 border-dashed rounded-full transition-colors flex items-center justify-center overflow-hidden ${
-                          !isGeofenceActive || isWithinGeofence ? 'border-[#34D058]' : 'border-[#FF8182]'
+                        className={`relative w-40 h-52 sm:w-48 sm:h-64 border-[3px] border-dashed rounded-full transition-all duration-300 flex items-center justify-center overflow-hidden ${
+                          isFaceAligned && (!isGeofenceActive || isWithinGeofence)
+                            ? 'border-[#34D058] shadow-[0_0_28px_rgba(52,208,88,0.45)]'
+                            : 'border-[#F85149] shadow-[0_0_24px_rgba(248,81,73,0.35)]'
                         }`}
-                        style={{ opacity: 0.92 }}
+                        style={{ opacity: 0.95 }}
                       >
                         {cameraStatus === 'ready' && (
-                          <div className="w-36 sm:w-40 h-0.5 bg-[#34D058]/85 rounded-full animate-scan-line" />
+                          <div
+                            className={`w-36 sm:w-40 h-0.5 rounded-full animate-scan-line ${
+                              isFaceAligned ? 'bg-[#34D058]/85' : 'bg-[#F85149]/75'
+                            }`}
+                          />
                         )}
                       </div>
                     </div>
                   )}
 
-                  {/* Live Hands-Free Auto-Capture Countdown Pill inside Viewfinder */}
-                  {isBiometricActive &&
-                    cameraStatus === 'ready' &&
-                    autoCaptureEnabled &&
-                    !autoCapturePaused &&
-                    !isSubmitting &&
-                    autoCaptureCountdown !== null && (
-                      <div className="absolute bottom-3 inset-x-0 flex justify-center px-3 pointer-events-none">
+                  {/* Live Alignment & Auto-Capture Status Pill inside Viewfinder */}
+                  {isBiometricActive && cameraStatus === 'ready' && !isSubmitting && (
+                    <div className="absolute bottom-3 inset-x-0 flex justify-center px-3 pointer-events-none">
+                      {autoCaptureEnabled && !autoCapturePaused && autoCaptureCountdown !== null ? (
                         <div className="bg-[#0D1117]/85 border border-[#34D058] text-white px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg">
                           <span className="w-5 h-5 rounded-full bg-[#1F883D] text-white flex items-center justify-center font-bold text-[11px]">
                             {autoCaptureCountdown}
                           </span>
-                          <span>{faceDetectedHint} Capturing in {autoCaptureCountdown}s</span>
+                          <span>Face aligned! Capturing in {autoCaptureCountdown}s</span>
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <div
+                          className={`bg-[#0D1117]/85 border text-white px-3.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-2 shadow-md ${
+                            isFaceAligned ? 'border-[#34D058]' : 'border-[#F85149]'
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              isFaceAligned ? 'bg-[#34D058]' : 'bg-[#F85149]'
+                            }`}
+                          />
+                          <span>{faceDetectedHint}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Full-Overlay Verifying State */}
                   {isSubmitting && (

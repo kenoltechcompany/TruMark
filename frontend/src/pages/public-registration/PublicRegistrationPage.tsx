@@ -15,6 +15,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import apiClient from '../../api/client';
+import { useFaceOvalAlignment } from '../../hooks/useFaceOvalAlignment';
 
 export default function PublicRegistrationPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -30,10 +31,10 @@ export default function PublicRegistrationPage() {
   const [cameraReady, setCameraReady] = useState(false);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
 
-  // Hands-free Auto-Capture states
-  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(false);
-  const [autoCaptureCountdown, setAutoCaptureCountdown] = useState<number | null>(null);
+  // Hands-free Auto-Capture states (oval stays red until face is centered, turns green for 4s then captures)
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
   const [autoCapturePaused, setAutoCapturePaused] = useState(false);
+  const [angleCooldown, setAngleCooldown] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -182,7 +183,6 @@ export default function PublicRegistrationPage() {
         if (!blob) return;
         const next = [...capturedImages, blob];
         setCapturedImages(next);
-        setAutoCaptureCountdown(null);
 
         if (currentCapture >= 2) {
           stopCamera();
@@ -196,59 +196,32 @@ export default function PublicRegistrationPage() {
     );
   }, [cameraReady, capturedImages, currentCapture, stopCamera, submitMutation]);
 
-  // Hands-free Auto-Capture countdown for each of the 3 angles
+  // Brief 800ms reset between angles so each of the 3 angles gets a fresh 4s green hold
   useEffect(() => {
-    const canAutoCapture =
-      step === 'biometrics' &&
-      cameraReady &&
-      autoCaptureEnabled &&
-      !autoCapturePaused &&
-      !submitMutation.isPending &&
-      !error;
+    if (currentCapture === 0) return;
+    setAngleCooldown(true);
+    const t = setTimeout(() => setAngleCooldown(false), 800);
+    return () => clearTimeout(t);
+  }, [currentCapture]);
 
-    if (!canAutoCapture) {
-      setAutoCaptureCountdown(null);
-      return;
-    }
+  const canDetectOval =
+    step === 'biometrics' &&
+    cameraReady &&
+    !angleCooldown &&
+    !submitMutation.isPending &&
+    !error;
 
-    let cancelled = false;
-    let countdownTimer: ReturnType<typeof setInterval> | null = null;
-
-    // Give a 1.3s pause between angles so the student has time to turn slightly left/right
-    const prepDelayMs = currentCapture === 0 ? 500 : 1400;
-    const prepTimer = setTimeout(() => {
-      if (cancelled) return;
-      let remaining = 3;
-      setAutoCaptureCountdown(remaining);
-
-      countdownTimer = setInterval(() => {
-        if (cancelled) return;
-        remaining -= 1;
-        if (remaining <= 0) {
-          if (countdownTimer) clearInterval(countdownTimer);
-          setAutoCaptureCountdown(null);
-          snapPhoto();
-        } else {
-          setAutoCaptureCountdown(remaining);
-        }
-      }, 900);
-    }, prepDelayMs);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(prepTimer);
-      if (countdownTimer) clearInterval(countdownTimer);
-    };
-  }, [
-    step,
-    cameraReady,
-    autoCaptureEnabled,
-    autoCapturePaused,
-    submitMutation.isPending,
-    error,
-    currentCapture,
-    snapPhoto,
-  ]);
+  const {
+    isFaceAligned,
+    alignmentHint,
+    countdownSeconds: autoCaptureCountdown,
+  } = useFaceOvalAlignment({
+    videoRef,
+    active: canDetectOval,
+    autoCaptureEnabled: autoCaptureEnabled && !autoCapturePaused,
+    holdSeconds: 4,
+    onAutoCapture: snapPhoto,
+  });
 
   const prompts = [
     { title: 'Angle 1 of 3: Front Profile', instruction: 'Look straight into the camera with neutral lighting' },
@@ -547,22 +520,31 @@ export default function PublicRegistrationPage() {
                       <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-white/70 rounded-br" />
                     </div>
 
-                    {/* Alignment Oval + Scan Line */}
+                    {/* Alignment Oval + Scan Line (Red until face centered, Green when aligned) */}
                     <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                      <div className="relative w-40 h-52 sm:w-44 sm:h-60 border-2 border-dashed border-[#34D058] rounded-full flex items-center justify-center overflow-hidden">
+                      <div
+                        className={`relative w-40 h-52 sm:w-44 sm:h-60 border-[3px] border-dashed rounded-full transition-all duration-300 flex items-center justify-center overflow-hidden ${
+                          isFaceAligned
+                            ? 'border-[#34D058] shadow-[0_0_28px_rgba(52,208,88,0.45)]'
+                            : 'border-[#F85149] shadow-[0_0_24px_rgba(248,81,73,0.35)]'
+                        }`}
+                      >
                         {cameraReady && (
-                          <div className="w-36 h-0.5 bg-[#34D058]/85 rounded-full animate-scan-line" />
+                          <div
+                            className={`w-36 h-0.5 rounded-full animate-scan-line ${
+                              isFaceAligned ? 'bg-[#34D058]/85' : 'bg-[#F85149]/75'
+                            }`}
+                          />
                         )}
                       </div>
                     </div>
 
-                    {/* Auto-Capture Countdown Pill inside Viewfinder */}
-                    {cameraReady &&
-                      autoCaptureEnabled &&
-                      !autoCapturePaused &&
-                      !submitMutation.isPending &&
-                      autoCaptureCountdown !== null && (
-                        <div className="absolute bottom-3 inset-x-0 flex justify-center px-3 pointer-events-none">
+                    {/* Alignment & Auto-Capture Status Pill inside Viewfinder */}
+                    {cameraReady && !submitMutation.isPending && (
+                      <div className="absolute bottom-3 inset-x-0 flex justify-center px-3 pointer-events-none">
+                        {autoCaptureEnabled &&
+                        !autoCapturePaused &&
+                        autoCaptureCountdown !== null ? (
                           <div className="bg-[#0D1117]/85 border border-[#34D058] text-white px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg">
                             <span className="w-5 h-5 rounded-full bg-[#1F883D] text-white flex items-center justify-center font-bold text-[11px]">
                               {autoCaptureCountdown}
@@ -571,8 +553,22 @@ export default function PublicRegistrationPage() {
                               Capturing Angle {currentCapture + 1}/3 in {autoCaptureCountdown}s
                             </span>
                           </div>
-                        </div>
-                      )}
+                        ) : (
+                          <div
+                            className={`bg-[#0D1117]/85 border text-white px-3.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-2 shadow-md ${
+                              isFaceAligned ? 'border-[#34D058]' : 'border-[#F85149]'
+                            }`}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                isFaceAligned ? 'bg-[#34D058]' : 'bg-[#F85149]'
+                              }`}
+                            />
+                            <span>{alignmentHint}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Enrolling Biometrics Full Overlay */}
                     {submitMutation.isPending && (
