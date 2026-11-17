@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
-import { FaceDetector as MpFaceDetector, FilesetResolver } from '@mediapipe/tasks-vision';
+import {
+  FaceDetector as MpFaceDetector,
+  FaceLandmarker,
+  FilesetResolver,
+} from '@mediapipe/tasks-vision';
 
 interface UseFaceOvalAlignmentOptions {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -8,72 +12,94 @@ interface UseFaceOvalAlignmentOptions {
   active: boolean;
   /** True when hands-free auto-capture should trigger after holdSeconds */
   autoCaptureEnabled: boolean;
-  /** Seconds the face must remain green-aligned inside the oval before capturing (default 4) */
+  /** Require an active blink (eyes open -> blink -> open) to block static photos/screens */
+  requireLiveness?: boolean;
+  /** Seconds the face must remain green-aligned (and liveness-verified if required) before capturing */
   holdSeconds?: number;
-  /** Callback fired once when face stays aligned for holdSeconds */
+  /** Callback fired once when face stays aligned & verified for holdSeconds */
   onAutoCapture: () => void;
 }
 
 interface UseFaceOvalAlignmentResult {
   isFaceAligned: boolean;
+  livenessVerified: boolean;
+  livenessSupported: boolean;
   alignmentHint: string;
   countdownSeconds: number | null;
 }
 
-let cachedMpDetectorPromise: Promise<MpFaceDetector | null> | null = null;
+const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
+const LANDMARKER_MODEL =
+  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const DETECTOR_MODEL =
+  'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
+
+let cachedLandmarkerPromise: Promise<FaceLandmarker | null> | null = null;
+let cachedDetectorPromise: Promise<MpFaceDetector | null> | null = null;
+
+async function getSharedFaceLandmarker(): Promise<FaceLandmarker | null> {
+  if (!cachedLandmarkerPromise) {
+    cachedLandmarkerPromise = (async () => {
+      for (const delegate of ['GPU', 'CPU'] as const) {
+        try {
+          const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+          return await FaceLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: LANDMARKER_MODEL, delegate },
+            runningMode: 'VIDEO',
+            numFaces: 1,
+            outputFaceBlendshapes: true,
+            minFaceDetectionConfidence: 0.6,
+            minFacePresenceConfidence: 0.6,
+          });
+        } catch {
+          // Try next delegate
+        }
+      }
+      return null;
+    })();
+  }
+  return cachedLandmarkerPromise;
+}
 
 async function getSharedMediaPipeDetector(): Promise<MpFaceDetector | null> {
-  if (!cachedMpDetectorPromise) {
-    cachedMpDetectorPromise = (async () => {
-      try {
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm',
-        );
-        return await MpFaceDetector.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          minDetectionConfidence: 0.6,
-        });
-      } catch {
-        // Fallback to CPU delegate if GPU delegate isn't supported on the device
+  if (!cachedDetectorPromise) {
+    cachedDetectorPromise = (async () => {
+      for (const delegate of ['GPU', 'CPU'] as const) {
         try {
-          const vision = await FilesetResolver.forVisionTasks(
-            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm',
-          );
+          const vision = await FilesetResolver.forVisionTasks(WASM_URL);
           return await MpFaceDetector.createFromOptions(vision, {
-            baseOptions: {
-              modelAssetPath:
-                'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
-            },
+            baseOptions: { modelAssetPath: DETECTOR_MODEL, delegate },
             runningMode: 'VIDEO',
             minDetectionConfidence: 0.6,
           });
         } catch {
-          return null;
+          // Try next delegate
         }
       }
+      return null;
     })();
   }
-  return cachedMpDetectorPromise;
+  return cachedDetectorPromise;
 }
 
 /**
- * Tracks real-time face-in-oval alignment using MediaPipe FaceDetector (with native FaceDetector fallback).
- * Keeps the oval red until the user's face is properly centered and sized inside the oval,
- * turns green when aligned, and triggers `onAutoCapture` after `holdSeconds` (4s) of continuous alignment.
+ * Tracks real-time face-in-oval alignment + active blink liveness using MediaPipe FaceLandmarker.
+ * - Oval stays RED until a face is properly centered & sized inside the oval.
+ * - Oval turns GREEN when aligned.
+ * - When `requireLiveness` is true, requires a real blink (eyes open -> closed -> open) to block printed/screen photos.
+ * - After `holdSeconds` (default 4s) of green alignment + liveness, triggers `onAutoCapture`.
  */
 export function useFaceOvalAlignment({
   videoRef,
   active,
   autoCaptureEnabled,
+  requireLiveness = false,
   holdSeconds = 4,
   onAutoCapture,
 }: UseFaceOvalAlignmentOptions): UseFaceOvalAlignmentResult {
   const [isFaceAligned, setIsFaceAligned] = useState(false);
+  const [livenessVerified, setLivenessVerified] = useState(false);
+  const [livenessSupported, setLivenessSupported] = useState(false);
   const [alignmentHint, setAlignmentHint] = useState('Position your face inside the oval');
   const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
 
@@ -82,12 +108,16 @@ export function useFaceOvalAlignment({
 
   const alignedSinceRef = useRef<number | null>(null);
   const triggeredRef = useRef(false);
+  // Blink state machine: 'need_open' -> 'saw_open' -> 'saw_closed' -> 'verified'
+  const blinkStageRef = useRef<'need_open' | 'saw_open' | 'saw_closed' | 'verified'>('need_open');
 
   useEffect(() => {
     if (!active) {
       alignedSinceRef.current = null;
       triggeredRef.current = false;
+      blinkStageRef.current = 'need_open';
       setIsFaceAligned(false);
+      setLivenessVerified(false);
       setCountdownSeconds(null);
       setAlignmentHint('Position your face inside the oval');
       return;
@@ -95,22 +125,16 @@ export function useFaceOvalAlignment({
 
     let cancelled = false;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let landmarker: FaceLandmarker | null = null;
     let mpDetector: MpFaceDetector | null = null;
     let nativeDetector: any = null;
 
-    const evaluateBox = (
-      cx: number,
-      cy: number,
-      w: number,
-      h: number,
-      vw: number,
-      vh: number,
+    const evaluateNormalizedBox = (
+      normCx: number,
+      normCy: number,
+      normW: number,
+      normH: number,
     ): { aligned: boolean; hint: string } => {
-      const normCx = cx / vw;
-      const normCy = cy / vh;
-      const normW = w / vw;
-      const normH = h / vh;
-
       if (normW < 0.16 || normH < 0.19) {
         return { aligned: false, hint: 'Move closer to the camera' };
       }
@@ -124,8 +148,11 @@ export function useFaceOvalAlignment({
     };
 
     const initAndPoll = async () => {
-      mpDetector = await getSharedMediaPipeDetector();
-      if (!mpDetector && (window as any).FaceDetector) {
+      landmarker = await getSharedFaceLandmarker();
+      if (!landmarker) {
+        mpDetector = await getSharedMediaPipeDetector();
+      }
+      if (!landmarker && !mpDetector && (window as any).FaceDetector) {
         try {
           nativeDetector = new (window as any).FaceDetector({
             fastMode: true,
@@ -138,7 +165,10 @@ export function useFaceOvalAlignment({
 
       if (cancelled) return;
 
-      if (!mpDetector && !nativeDetector) {
+      const hasLandmarker = Boolean(landmarker);
+      setLivenessSupported(hasLandmarker);
+
+      if (!landmarker && !mpDetector && !nativeDetector) {
         setAlignmentHint('Center face and tap shutter');
         setIsFaceAligned(false);
         return;
@@ -156,17 +186,57 @@ export function useFaceOvalAlignment({
           const vh = video.videoHeight;
 
           try {
-            if (mpDetector) {
+            if (landmarker) {
+              const res = landmarker.detectForVideo(video, performance.now());
+              const landmarks = res?.faceLandmarks?.[0];
+              if (landmarks && landmarks.length > 0) {
+                let minX = 1;
+                let maxX = 0;
+                let minY = 1;
+                let maxY = 0;
+                for (const pt of landmarks) {
+                  if (pt.x < minX) minX = pt.x;
+                  if (pt.x > maxX) maxX = pt.x;
+                  if (pt.y < minY) minY = pt.y;
+                  if (pt.y > maxY) maxY = pt.y;
+                }
+                const check = evaluateNormalizedBox(
+                  (minX + maxX) / 2,
+                  (minY + maxY) / 2,
+                  maxX - minX,
+                  maxY - minY,
+                );
+                aligned = check.aligned;
+                hint = check.hint;
+
+                // Evaluate active blink liveness from blendshapes
+                if (aligned && requireLiveness && blinkStageRef.current !== 'verified') {
+                  const categories = res?.faceBlendshapes?.[0]?.categories || [];
+                  const leftBlink =
+                    categories.find((c) => c.categoryName === 'eyeBlinkLeft')?.score ?? 0;
+                  const rightBlink =
+                    categories.find((c) => c.categoryName === 'eyeBlinkRight')?.score ?? 0;
+                  const blinkScore = Math.max(leftBlink, rightBlink);
+
+                  if (blinkStageRef.current === 'need_open' && blinkScore < 0.25) {
+                    blinkStageRef.current = 'saw_open';
+                  } else if (blinkStageRef.current === 'saw_open' && blinkScore >= 0.38) {
+                    blinkStageRef.current = 'saw_closed';
+                  } else if (blinkStageRef.current === 'saw_closed' && blinkScore < 0.25) {
+                    blinkStageRef.current = 'verified';
+                    setLivenessVerified(true);
+                  }
+                }
+              }
+            } else if (mpDetector) {
               const res = mpDetector.detectForVideo(video, performance.now());
               const box = res?.detections?.[0]?.boundingBox;
               if (box) {
-                const check = evaluateBox(
-                  box.originX + box.width / 2,
-                  box.originY + box.height / 2,
-                  box.width,
-                  box.height,
-                  vw,
-                  vh,
+                const check = evaluateNormalizedBox(
+                  (box.originX + box.width / 2) / vw,
+                  (box.originY + box.height / 2) / vh,
+                  box.width / vw,
+                  box.height / vh,
                 );
                 aligned = check.aligned;
                 hint = check.hint;
@@ -175,13 +245,11 @@ export function useFaceOvalAlignment({
               const faces = await nativeDetector.detect(video);
               const box = faces?.[0]?.boundingBox;
               if (box) {
-                const check = evaluateBox(
-                  box.x + box.width / 2,
-                  box.y + box.height / 2,
-                  box.width,
-                  box.height,
-                  vw,
-                  vh,
+                const check = evaluateNormalizedBox(
+                  (box.x + box.width / 2) / vw,
+                  (box.y + box.height / 2) / vh,
+                  box.width / vw,
+                  box.height / vh,
                 );
                 aligned = check.aligned;
                 hint = check.hint;
@@ -194,10 +262,24 @@ export function useFaceOvalAlignment({
 
         if (cancelled) return;
 
+        // If face leaves the oval before liveness is verified, reset blink state
+        if (!aligned && blinkStageRef.current !== 'verified') {
+          blinkStageRef.current = 'need_open';
+        }
+
+        const isLiveReady =
+          !requireLiveness || !hasLandmarker || blinkStageRef.current === 'verified';
+
+        if (aligned && !isLiveReady) {
+          hint = 'Liveness check: Blink your eyes once';
+        } else if (aligned && isLiveReady && requireLiveness && hasLandmarker) {
+          hint = 'Liveness verified! Hold still...';
+        }
+
         setIsFaceAligned(aligned);
         setAlignmentHint(hint);
 
-        if (aligned && autoCaptureEnabled && !triggeredRef.current) {
+        if (aligned && isLiveReady && autoCaptureEnabled && !triggeredRef.current) {
           if (alignedSinceRef.current === null) {
             alignedSinceRef.current = Date.now();
           }
@@ -216,7 +298,7 @@ export function useFaceOvalAlignment({
           setCountdownSeconds(null);
         }
 
-        pollTimer = setTimeout(tick, 180);
+        pollTimer = setTimeout(tick, 140);
       };
 
       tick();
@@ -228,7 +310,7 @@ export function useFaceOvalAlignment({
       cancelled = true;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [active, autoCaptureEnabled, holdSeconds, videoRef]);
+  }, [active, autoCaptureEnabled, holdSeconds, requireLiveness, videoRef]);
 
-  return { isFaceAligned, alignmentHint, countdownSeconds };
+  return { isFaceAligned, livenessVerified, livenessSupported, alignmentHint, countdownSeconds };
 }

@@ -351,12 +351,15 @@ export default function PublicCheckInPage() {
 
   const {
     isFaceAligned,
+    livenessVerified,
+    livenessSupported,
     alignmentHint: faceDetectedHint,
     countdownSeconds: autoCaptureCountdown,
   } = useFaceOvalAlignment({
     videoRef,
     active: canDetectOval,
     autoCaptureEnabled: autoCaptureEnabled && !autoCapturePaused,
+    requireLiveness: true,
     holdSeconds: 4,
     onAutoCapture: handleCaptureAndCheckIn,
   });
@@ -814,6 +817,12 @@ export default function PublicCheckInPage() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (livenessSupported && !livenessVerified) {
+                            setSubmitError(
+                              'Liveness check required: Please center your face in the green oval and blink once to prove you are a real person (not a photo).',
+                            );
+                            return;
+                          }
                           setAutoCapturePaused(false);
                           handleCaptureAndCheckIn();
                         }}
@@ -821,7 +830,8 @@ export default function PublicCheckInPage() {
                           isSubmitting ||
                           !session.isActive ||
                           (isGeofenceActive && (locationStatus !== 'ready' || !isWithinGeofence)) ||
-                          cameraStatus !== 'ready'
+                          cameraStatus !== 'ready' ||
+                          (livenessSupported && !livenessVerified)
                         }
                         aria-label="Capture selfie and mark attendance"
                         className="neu-shutter shrink-0"
