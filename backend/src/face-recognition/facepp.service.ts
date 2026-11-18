@@ -227,23 +227,38 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       return new Map(rows.map((r) => [r.id, r.imagePaths]));
     };
 
-    // ── Fast Path 1: Instant 1:1 Verification if Index Number Hint was supplied ──
+    // ── Fast Path 1: Strict 1:1 Verification when Index Number is supplied ──
     if (indexNumberHint && indexNumberHint.trim()) {
+      const cleanId = indexNumberHint.trim();
       const target = enrolled.find(
-        (s) => s.indexNumber.toLowerCase() === indexNumberHint.trim().toLowerCase(),
+        (s) => s.indexNumber.toLowerCase() === cleanId.toLowerCase(),
       );
-      if (target) {
-        const pathsMap = target.azurePersonId
-          ? new Map<string, string[]>()
-          : await loadImagePathsMap([target.id]);
-        const match = await this.compareSingleCandidate(
-          classId,
-          { ...target, imagePaths: pathsMap.get(target.id) || [] },
-          probeBase64,
-          probeFaceToken,
+      if (!target) {
+        throw new BadRequestException(
+          `No student with Index Number "${cleanId}" is enrolled in this class.`,
         );
-        if (match) return match;
       }
+
+      const pathsMap = target.azurePersonId
+        ? new Map<string, string[]>()
+        : await loadImagePathsMap([target.id]);
+      let seenConf = 0;
+      const match = await this.compareSingleCandidate(
+        classId,
+        { ...target, imagePaths: pathsMap.get(target.id) || [] },
+        probeBase64,
+        probeFaceToken,
+        (c) => {
+          seenConf = c;
+        },
+      );
+      if (match) return match;
+
+      throw new BadRequestException(
+        seenConf > 0
+          ? `Face does not match the enrolled profile for ${target.fullName} (${cleanId}) (${seenConf.toFixed(1)}% vs ${this.minConfidence.toFixed(1)}% required).`
+          : `No facial biometric data is enrolled yet for ${target.fullName} (${cleanId}). Please enroll your face first.`,
+      );
     }
 
     // ── Fast Path 2: O(1) FaceSet /search using probeFaceToken ──

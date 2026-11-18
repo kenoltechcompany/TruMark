@@ -80,7 +80,13 @@ export default function PublicCheckInPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
   const [submitError, setSubmitError] = useState('');
-  const [indexNumber, setIndexNumber] = useState('');
+  const [indexNumber, setIndexNumber] = useState(() => {
+    try {
+      return localStorage.getItem('trumark_last_index_number') || '';
+    } catch {
+      return '';
+    }
+  });
 
   // Hands-free Auto-Capture states (oval stays red until face is centered, turns green for 4s then captures)
   const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
@@ -279,6 +285,11 @@ export default function PublicCheckInPage() {
         formData.append('latitude', String(coords.latitude));
         formData.append('longitude', String(coords.longitude));
       }
+      if (isBiometricActive && !indexNumber.trim()) {
+        setSubmitError('Please enter your Student Index Number first before scanning your face.');
+        return;
+      }
+
       if (indexNumber.trim()) {
         formData.append('indexNumber', indexNumber.trim());
       }
@@ -313,6 +324,13 @@ export default function PublicCheckInPage() {
         },
       );
 
+      try {
+        if (indexNumber.trim()) {
+          localStorage.setItem('trumark_last_index_number', indexNumber.trim());
+        }
+      } catch {
+        // ignore storage errors
+      }
       setCheckInResult(res.data);
       // Stop camera once verified
       if (streamRef.current) {
@@ -344,6 +362,7 @@ export default function PublicCheckInPage() {
     Boolean(session?.isActive) &&
     !checkInResult &&
     isBiometricActive &&
+    Boolean(indexNumber.trim()) &&
     cameraStatus === 'ready' &&
     (!isGeofenceActive || (locationStatus === 'ready' && isWithinGeofence)) &&
     !isSubmitting &&
@@ -654,6 +673,35 @@ export default function PublicCheckInPage() {
                 </div>
               )}
 
+              {/* Step 1: Student Index Number Input for Instant 1:1 Face Verification */}
+              {isBiometricActive && (
+                <div className="bg-white border border-[#D0D7DE] rounded-xl p-3.5 sm:p-4 shadow-xs">
+                  <label
+                    htmlFor="checkin-index-number"
+                    className="block text-xs font-bold uppercase tracking-wider text-[#1F2328] mb-1.5"
+                  >
+                    Step 1 — Student Index Number
+                  </label>
+                  <input
+                    id="checkin-index-number"
+                    type="text"
+                    value={indexNumber}
+                    onChange={(e) => {
+                      setIndexNumber(e.target.value);
+                      if (submitError) setSubmitError('');
+                    }}
+                    placeholder="Enter your Student ID (e.g. CS/2026/001)"
+                    className="w-full border border-[#D0D7DE] rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#0969DA] bg-[#F6F8FA] focus:bg-white transition-colors"
+                    required
+                  />
+                  <p className="text-[11px] text-[#656D76] mt-1.5">
+                    {indexNumber.trim()
+                      ? 'ID entered — position your face in the oval below to verify 1:1.'
+                      : 'Enter your Student Index Number first to activate face verification.'}
+                  </p>
+                </div>
+              )}
+
               <div className="bg-white border border-[#D0D7DE] rounded-xl p-3.5 sm:p-5 shadow-xs">
                 {/* Top HUD Bar */}
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -829,6 +877,7 @@ export default function PublicCheckInPage() {
                         disabled={
                           isSubmitting ||
                           !session.isActive ||
+                          !indexNumber.trim() ||
                           (isGeofenceActive && (locationStatus !== 'ready' || !isWithinGeofence)) ||
                           cameraStatus !== 'ready' ||
                           (livenessSupported && !livenessVerified)
