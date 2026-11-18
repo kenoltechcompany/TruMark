@@ -25,7 +25,18 @@ import {
   MinLength,
   IsDateString,
   IsOptional,
+  IsBoolean,
 } from 'class-validator';
+
+export class UpdateRepSettingsDto {
+  @IsOptional()
+  @IsBoolean()
+  enableBiometricValidation?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableGeofencing?: boolean;
+}
 
 export class CreateRepClassDto {
   @IsString()
@@ -124,6 +135,16 @@ const imageFileFilter = (
 @Controller('course-rep')
 export class CourseRepController {
   constructor(private readonly courseRepService: CourseRepService) {}
+
+  @Get('settings')
+  getVerificationSettings() {
+    return this.courseRepService.getVerificationSettings();
+  }
+
+  @Patch('settings')
+  updateVerificationSettings(@Body() dto: UpdateRepSettingsDto) {
+    return this.courseRepService.updateVerificationSettings(dto);
+  }
 
   @Get('my-class')
   getMyClass(@Req() req: any) {

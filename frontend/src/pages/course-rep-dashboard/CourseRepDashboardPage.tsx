@@ -12,6 +12,7 @@ import {
   Upload,
   UserPlus,
   Plus,
+  MapPin,
 } from 'lucide-react';
 import apiClient from '../../api/client';
 import DataTable from '../../components/DataTable';
@@ -60,6 +61,24 @@ export default function CourseRepDashboardPage() {
   const { data: myClasses = [] } = useQuery<Array<{ id: string; name: string }>>({
     queryKey: ['my-classes'],
     queryFn: () => apiClient.get('/course-rep/classes').then((r) => r.data),
+  });
+
+  const { data: verificationSettings } = useQuery<{
+    enableBiometricValidation: boolean;
+    enableGeofencing: boolean;
+  }>({
+    queryKey: ['rep-verification-settings'],
+    queryFn: () => apiClient.get('/course-rep/settings').then((r) => r.data),
+  });
+
+  const settingsMutation = useMutation({
+    mutationFn: (payload: { enableBiometricValidation?: boolean; enableGeofencing?: boolean }) =>
+      apiClient.patch('/course-rep/settings', payload).then((r) => r.data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['rep-verification-settings'], data);
+      queryClient.invalidateQueries({ queryKey: ['public-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-settings'] });
+    },
   });
 
   const createClassMutation = useMutation({

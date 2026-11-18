@@ -619,4 +619,47 @@ export class CourseRepService {
 
     return rows.map((r) => r.join(',')).join('\n');
   }
+  async getVerificationSettings() {
+    let settings = await this.prisma.systemSetting.findUnique({
+      where: { id: 'default' },
+    });
+    if (!settings) {
+      settings = await this.prisma.systemSetting.create({
+        data: {
+          id: 'default',
+          enableLandingPage: true,
+          enableBiometricValidation: true,
+          enableGeofencing: true,
+        },
+      });
+    }
+    return {
+      enableBiometricValidation: settings.enableBiometricValidation,
+      enableGeofencing: settings.enableGeofencing,
+      updatedAt: settings.updatedAt,
+    };
+  }
+
+  async updateVerificationSettings(data: {
+    enableBiometricValidation?: boolean;
+    enableGeofencing?: boolean;
+  }) {
+    await this.getVerificationSettings();
+    const updated = await this.prisma.systemSetting.update({
+      where: { id: 'default' },
+      data: {
+        ...(data.enableBiometricValidation !== undefined
+          ? { enableBiometricValidation: data.enableBiometricValidation }
+          : {}),
+        ...(data.enableGeofencing !== undefined
+          ? { enableGeofencing: data.enableGeofencing }
+          : {}),
+      },
+    });
+    return {
+      enableBiometricValidation: updated.enableBiometricValidation,
+      enableGeofencing: updated.enableGeofencing,
+      updatedAt: updated.updatedAt,
+    };
+  }
 }
