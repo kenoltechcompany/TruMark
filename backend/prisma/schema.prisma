@@ -27,11 +27,13 @@ model Class {
   id                     String   @id @default(uuid()) @db.Uuid
   name                   String
   registrationLinkActive Boolean  @default(false) @map("registration_link_active")
+  createdByRepId         String?  @map("created_by_rep_id") @db.Uuid
   createdAt              DateTime @default(now()) @map("created_at")
 
   students Student[]
   sessions Session[]
 
+  @@index([createdByRepId])
   @@map("classes")
 }
 

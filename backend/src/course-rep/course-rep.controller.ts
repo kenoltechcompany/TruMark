@@ -27,6 +27,12 @@ import {
   IsOptional,
 } from 'class-validator';
 
+export class CreateRepClassDto {
+  @IsString()
+  @MinLength(1)
+  name: string;
+}
+
 export class CreateStudentDto {
   @IsString()
   @MinLength(1)

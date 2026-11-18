@@ -11,6 +11,7 @@ import {
   Calendar,
   Upload,
   UserPlus,
+  Plus,
 } from 'lucide-react';
 import apiClient from '../../api/client';
 import DataTable from '../../components/DataTable';
@@ -46,11 +47,43 @@ export default function CourseRepDashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [biometricFilter, setBiometricFilter] = useState<'all' | 'ready' | 'pending'>('all');
+  const [showNewClassModal, setShowNewClassModal] = useState(false);
+  const [newClassName, setNewClassName] = useState('');
+  const [classError, setClassError] = useState('');
 
   // ── Fetch class data ──
   const { data: classData, isLoading } = useQuery<MyClassData>({
     queryKey: ['my-class'],
     queryFn: () => apiClient.get('/course-rep/my-class').then((r) => r.data),
+  });
+
+  const { data: myClasses = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['my-classes'],
+    queryFn: () => apiClient.get('/course-rep/classes').then((r) => r.data),
+  });
+
+  const createClassMutation = useMutation({
+    mutationFn: (name: string) => apiClient.post('/course-rep/classes', { name }),
+    onSuccess: () => {
+      setShowNewClassModal(false);
+      setNewClassName('');
+      setClassError('');
+      queryClient.invalidateQueries({ queryKey: ['my-class'] });
+      queryClient.invalidateQueries({ queryKey: ['my-classes'] });
+      queryClient.invalidateQueries({ queryKey: ['rep-sessions'] });
+    },
+    onError: (err: any) => {
+      setClassError(err.response?.data?.message || 'Failed to create class.');
+    },
+  });
+
+  const switchClassMutation = useMutation({
+    mutationFn: (classId: string) => apiClient.patch(`/course-rep/classes/${classId}/switch`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-class'] });
+      queryClient.invalidateQueries({ queryKey: ['my-classes'] });
+      queryClient.invalidateQueries({ queryKey: ['rep-sessions'] });
+    },
   });
 
   // ── Toggle registration ──
@@ -123,7 +156,35 @@ export default function CourseRepDashboardPage() {
       <div className="bg-white border border-[#D0D7DE] rounded-xl p-5 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-[#1F2328]">{classData.name}</h2>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-xl font-bold text-[#1F2328]">{classData.name}</h2>
+              {myClasses.length > 1 && (
+                <select
+                  aria-label="Switch active class"
+                  value={classData.id}
+                  disabled={switchClassMutation.isPending}
+                  onChange={(e) => switchClassMutation.mutate(e.target.value)}
+                  className="text-xs font-medium bg-[#F6F8FA] border border-[#D0D7DE] rounded-lg px-2.5 py-1.5 text-[#1F2328] focus:outline-none focus:ring-2 focus:ring-[#0969DA] cursor-pointer"
+                >
+                  {myClasses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setClassError('');
+                  setShowNewClassModal(true);
+                }}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0969DA] bg-[#EFF6FF] border border-[#0969DA]/30 hover:bg-[#DBEAFE] px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New Class</span>
+              </button>
+            </div>
             <p className="text-sm text-[#656D76] mt-1">
               Manage student enrollment, biometric face sync, and self-registration links.
             </p>

@@ -55,6 +55,66 @@ export class CourseRepService {
     });
   }
 
+  async getMyClasses(repId: string) {
+    const rep = await this.getRepStudent(repId);
+    return this.prisma.class.findMany({
+      where: {
+        OR: [{ id: rep.classId }, { createdByRepId: rep.id }],
+      },
+      select: {
+        id: true,
+        name: true,
+        registrationLinkActive: true,
+        createdAt: true,
+        _count: { select: { students: true, sessions: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createClass(repId: string, name: string) {
+    const rep = await this.getRepStudent(repId);
+    const trimmed = name.trim();
+    if (!trimmed) {
+      throw new BadRequestException('Class name cannot be empty.');
+    }
+    // Preserve ownership of the rep's current class so they can always switch back
+    await this.prisma.class.updateMany({
+      where: { id: rep.classId, createdByRepId: null },
+      data: { createdByRepId: rep.id },
+    });
+    const created = await this.prisma.class.create({
+      data: {
+        name: trimmed,
+        createdByRepId: rep.id,
+      },
+    });
+    await this.prisma.student.update({
+      where: { id: rep.id },
+      data: { classId: created.id },
+    });
+    return created;
+  }
+
+  async switchClass(repId: string, classId: string) {
+    const rep = await this.getRepStudent(repId);
+    const target = await this.prisma.class.findFirst({
+      where: {
+        id: classId,
+        OR: [{ id: rep.classId }, { createdByRepId: rep.id }],
+      },
+      select: { id: true, name: true },
+    });
+    if (!target) {
+      throw new NotFoundException('Class not found or not managed by you.');
+    }
+    await this.prisma.student.update({
+      where: { id: rep.id },
+      data: { classId: target.id },
+    });
+    return target;
+  }
+
   /**
    * Toggles the registrationLinkActive flag for the CourseRep's class.
    */

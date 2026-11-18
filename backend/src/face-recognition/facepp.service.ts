@@ -23,8 +23,8 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     process.env.FACEPP_API_URL ||
     'https://api-us.faceplusplus.com/facepp/v3'
   ).replace(/\/$/, '');
-  // Strict threshold (default 70%, ~1e-4 FAR on Face++) to balance accuracy across mobile lighting/angles
-  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 70);
+  // Strict 1e-5 FAR+ threshold (default 78%) to eliminate false-positive matches for unregistered faces
+  private readonly minConfidence = Number(process.env.FACEPP_CONFIDENCE_THRESHOLD || 78);
 
   // Global Face++ API serialization queue to prevent CONCURRENCY_LIMIT_EXCEEDED when multiple students check in simultaneously
   private apiQueue: Promise<any> = Promise.resolve();
@@ -261,8 +261,8 @@ export class FacePlusPlusService implements IFaceRecognitionService {
 
         const results: any[] = Array.isArray(searchRes.results) ? searchRes.results : [];
         const strictThreshold = Number(
-          searchRes.thresholds?.['1e-4'] ??
-            searchRes.thresholds?.['1e-5'] ??
+          searchRes.thresholds?.['1e-5'] ??
+            searchRes.thresholds?.['1e-4'] ??
             this.minConfidence,
         );
         const requiredScore = Math.max(strictThreshold, this.minConfidence);
@@ -305,6 +305,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       personId?: string;
       confidence100: number;
     } | null = null;
+    let secondBestConfidence100 = 0;
     let highestSeenConfidence = highestSearchConfidence;
 
     for (const candidate of candidatesToCompare) {
@@ -324,21 +325,42 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       if (res) {
         const conf100 = res.confidence * 100;
         if (!bestMatch || conf100 > bestMatch.confidence100) {
+          if (bestMatch) {
+            secondBestConfidence100 = Math.max(
+              secondBestConfidence100,
+              bestMatch.confidence100,
+            );
+          }
           bestMatch = {
             studentId: candidate.id,
             fullName: candidate.fullName,
             personId: res.personId,
             confidence100: conf100,
           };
+        } else {
+          secondBestConfidence100 = Math.max(secondBestConfidence100, conf100);
         }
-        // Short-circuit immediately on >= 80% confidence to keep latency minimal
-        if (conf100 >= 80) {
+        // Only short-circuit early on high-certainty matches (>= 88%)
+        if (conf100 >= 88) {
           break;
         }
       }
     }
 
     if (bestMatch) {
+      // Reject ambiguous borderline matches where two different students score within 3% below 85%
+      if (
+        bestMatch.confidence100 < 85 &&
+        secondBestConfidence100 > 0 &&
+        bestMatch.confidence100 - secondBestConfidence100 < 3
+      ) {
+        this.logger.warn(
+          `Ambiguous Face++ match rejected: ${bestMatch.fullName} (${bestMatch.confidence100.toFixed(2)}%) vs runner-up (${secondBestConfidence100.toFixed(2)}%)`,
+        );
+        throw new BadRequestException(
+          'Face not recognized with sufficient certainty. Please ensure you are enrolled in this class and try again in clear lighting.',
+        );
+      }
       return {
         studentId: bestMatch.studentId,
         personId: bestMatch.personId,
@@ -427,7 +449,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       if (onConfidenceSeen) onConfidenceSeen(confidence100);
 
       const strictThreshold = Number(
-        cmpRes.thresholds?.['1e-4'] ?? cmpRes.thresholds?.['1e-5'] ?? this.minConfidence,
+        cmpRes.thresholds?.['1e-5'] ?? cmpRes.thresholds?.['1e-4'] ?? this.minConfidence,
       );
       const requiredScore = Math.max(strictThreshold, this.minConfidence);
 
