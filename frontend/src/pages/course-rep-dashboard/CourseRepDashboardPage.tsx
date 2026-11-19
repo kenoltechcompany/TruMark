@@ -101,6 +101,23 @@ export default function CourseRepDashboardPage() {
 
   const switchClassMutation = useMutation({
     mutationFn: (classId: string) => apiClient.patch(`/course-rep/classes/${classId}/switch`),
+    onMutate: async (classId: string) => {
+      await queryClient.cancelQueries({ queryKey: ['my-class'] });
+      const prev = queryClient.getQueryData<MyClassData>(['my-class']);
+      const target = myClasses.find((c) => c.id === classId);
+      if (prev && target) {
+        queryClient.setQueryData<MyClassData>(['my-class'], {
+          ...prev,
+          id: target.id,
+          name: target.name,
+        });
+      }
+      return { prev };
+    },
+    onError: (err: any, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['my-class'], ctx.prev);
+      alert(err.response?.data?.message || 'Failed to switch class.');
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-class'] });
       queryClient.invalidateQueries({ queryKey: ['my-classes'] });
@@ -110,8 +127,32 @@ export default function CourseRepDashboardPage() {
 
   // ── Toggle registration ──
   const toggleMutation = useMutation({
-    mutationFn: () => apiClient.patch('/course-rep/my-class/toggle-registration'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-class'] }),
+    mutationFn: () =>
+      apiClient.patch<{ id: string; name: string; registrationLinkActive: boolean }>(
+        '/course-rep/my-class/toggle-registration',
+      ).then((r) => r.data),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['my-class'] });
+      const prev = queryClient.getQueryData<MyClassData>(['my-class']);
+      if (prev) {
+        queryClient.setQueryData<MyClassData>(['my-class'], {
+          ...prev,
+          registrationLinkActive: !prev.registrationLinkActive,
+        });
+      }
+      return { prev };
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData<MyClassData | undefined>(['my-class'], (old) =>
+        old ? { ...old, registrationLinkActive: updated.registrationLinkActive } : old,
+      );
+      queryClient.invalidateQueries({ queryKey: ['my-class'] });
+      queryClient.invalidateQueries({ queryKey: ['my-classes'] });
+    },
+    onError: (err: any, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['my-class'], ctx.prev);
+      alert(err.response?.data?.message || 'Failed to toggle student self-registration.');
+    },
   });
 
   // ── Delete single student ──
