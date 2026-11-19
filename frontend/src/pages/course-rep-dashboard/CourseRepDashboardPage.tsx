@@ -17,6 +17,7 @@ import {
 import apiClient from '../../api/client';
 import DataTable from '../../components/DataTable';
 import CsvImportModal from '../../components/CsvImportModal';
+import { CourseRepDashboardSkeleton } from '../../components/Skeleton';
 
 interface Student {
   id: string;
@@ -51,9 +52,10 @@ export default function CourseRepDashboardPage() {
   const [showNewClassModal, setShowNewClassModal] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [classError, setClassError] = useState('');
+  const [isSwitchingClass, setIsSwitchingClass] = useState(false);
 
   // ── Fetch class data ──
-  const { data: classData, isLoading } = useQuery<MyClassData>({
+  const { data: classData, isLoading, isFetching } = useQuery<MyClassData>({
     queryKey: ['my-class'],
     queryFn: () => apiClient.get('/course-rep/my-class').then((r) => r.data),
   });
@@ -102,6 +104,7 @@ export default function CourseRepDashboardPage() {
   const switchClassMutation = useMutation({
     mutationFn: (classId: string) => apiClient.patch(`/course-rep/classes/${classId}/switch`),
     onMutate: async (classId: string) => {
+      setIsSwitchingClass(true);
       await queryClient.cancelQueries({ queryKey: ['my-class'] });
       const prev = queryClient.getQueryData<MyClassData>(['my-class']);
       const target = myClasses.find((c) => c.id === classId);
@@ -118,10 +121,13 @@ export default function CourseRepDashboardPage() {
       if (ctx?.prev) queryClient.setQueryData(['my-class'], ctx.prev);
       alert(err.response?.data?.message || 'Failed to switch class.');
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-class'] });
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: ['my-class'] });
       queryClient.invalidateQueries({ queryKey: ['my-classes'] });
       queryClient.invalidateQueries({ queryKey: ['rep-sessions'] });
+    },
+    onSettled: () => {
+      setIsSwitchingClass(false);
     },
   });
 
@@ -399,6 +405,7 @@ export default function CourseRepDashboardPage() {
         </div>
 
         <DataTable<Student>
+          loading={isFetching && (isSwitchingClass || switchClassMutation.isPending)}
           columns={[
             {
               key: 'fullName',

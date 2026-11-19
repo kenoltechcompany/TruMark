@@ -1,4 +1,5 @@
 import { useState, useMemo, type ReactNode } from 'react';
+import { Skeleton } from './Skeleton';
 import {
   Search,
   X,
@@ -400,17 +401,20 @@ export default function DataTable<T>({
             </thead>
             <tbody className="divide-y divide-[#E1E4E8] text-[#1F2328]">
               {loading ? (
-                <tr>
-                  <td
-                    colSpan={columns.length + (selectable ? 1 : 0)}
-                    className="px-4 py-12 text-center text-[#656D76]"
-                  >
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <div className="w-6 h-6 border-2 border-[#0969DA] border-t-transparent rounded-full animate-spin" />
-                      <span className="text-sm">Loading records...</span>
-                    </div>
-                  </td>
-                </tr>
+                [0, 1, 2, 3, 4].map((rowIdx) => (
+                  <tr key={`skeleton-${rowIdx}`} aria-hidden="true">
+                    {selectable && (
+                      <td className="px-3 py-3">
+                        <Skeleton className="h-4 w-4 rounded" />
+                      </td>
+                    )}
+                    {columns.map((col) => (
+                      <td key={col.key} className="px-4 py-3.5">
+                        <Skeleton className="h-4 w-24 max-w-full" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : paginatedData.length === 0 ? (
                 <tr>
                   <td
