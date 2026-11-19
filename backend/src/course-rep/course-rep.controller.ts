@@ -151,6 +151,21 @@ export class CourseRepController {
     return this.courseRepService.getMyClass(req.user.id);
   }
 
+  @Get('classes')
+  getMyClasses(@Req() req: any) {
+    return this.courseRepService.getMyClasses(req.user.id);
+  }
+
+  @Post('classes')
+  createClass(@Req() req: any, @Body() dto: CreateRepClassDto) {
+    return this.courseRepService.createClass(req.user.id, dto.name);
+  }
+
+  @Patch('classes/:classId/switch')
+  switchClass(@Req() req: any, @Param('classId') classId: string) {
+    return this.courseRepService.switchClass(req.user.id, classId);
+  }
+
   @Patch('my-class/toggle-registration')
   toggleRegistration(@Req() req: any) {
     return this.courseRepService.toggleRegistration(req.user.id);

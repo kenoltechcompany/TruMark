@@ -79,6 +79,9 @@ export default function CourseRepDashboardPage() {
       queryClient.invalidateQueries({ queryKey: ['public-settings'] });
       queryClient.invalidateQueries({ queryKey: ['admin-settings'] });
     },
+    onError: (err: any) => {
+      alert(err.response?.data?.message || 'Failed to update verification settings.');
+    },
   });
 
   const createClassMutation = useMutation({
