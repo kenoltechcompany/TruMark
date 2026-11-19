@@ -724,7 +724,14 @@ function ManualOnboardingModal({
   const [capturedImages, setCapturedImages] = useState<Blob[]>([]);
   const [currentCapture, setCurrentCapture] = useState(0);
   const [error, setError] = useState('');
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const attachVideoRef = (el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    if (el && streamRef.current && el.srcObject !== streamRef.current) {
+      el.srcObject = streamRef.current;
+      el.play().catch(() => {});
+    }
+  };
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -747,10 +754,17 @@ function ManualOnboardingModal({
   // Start webcam
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
       streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
     } catch {
-      setError('Could not access webcam. Please ensure permissions are granted.');
+      setError('Could not access webcam. Please ensure camera permissions are granted.');
     }
   };
 
@@ -767,11 +781,14 @@ function ManualOnboardingModal({
     if (!videoRef.current || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const rawW = video.videoWidth || 640;
+    const rawH = video.videoHeight || 480;
+    const scale = Math.min(1, 640 / Math.max(rawW, rawH));
+    canvas.width = Math.round(rawW * scale);
+    canvas.height = Math.round(rawH * scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob(
       (blob) => {
@@ -902,7 +919,7 @@ function ManualOnboardingModal({
             </p>
             <div className="relative w-full aspect-video bg-black rounded-md overflow-hidden">
               <video
-                ref={videoRef}
+                ref={attachVideoRef}
                 autoPlay
                 playsInline
                 muted
