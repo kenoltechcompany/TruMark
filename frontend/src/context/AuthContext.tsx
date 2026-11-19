@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
 import apiClient from '../api/client';
 
 interface AuthContextValue {
@@ -15,37 +15,48 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-/** Decodes the payload portion of a JWT without verifying the signature. */
-function decodeToken(token: string): { sub: string; username: string; role: string; classId?: string } | null {
+interface DecodedToken {
+  sub: string;
+  username: string;
+  role: string;
+  classId?: string;
+  exp?: number;
+}
+
+/** Decodes the payload portion of a JWT (supporting base64url) without verifying the signature. */
+function decodeToken(token: string): DecodedToken | null {
   try {
-    const payload = token.split('.')[1];
-    return JSON.parse(atob(payload));
+    const base64Url = token.split('.')[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const decoded = JSON.parse(atob(padded)) as DecodedToken;
+    if (decoded.exp && decoded.exp * 1000 <= Date.now()) {
+      return null;
+    }
+    return decoded;
   } catch {
     return null;
   }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
-  const [role, setRole] = useState<string | null>(null);
-  const [classId, setClassId] = useState<string | null>(null);
-  const [username, setUsername] = useState<string | null>(null);
-
-  const isAuthenticated = !!token;
-
-  // Sync role + classId + username from token whenever it changes
-  useEffect(() => {
-    if (token) {
-      const decoded = decodeToken(token);
-      setRole(decoded?.role ?? null);
-      setClassId(decoded?.classId ?? null);
-      setUsername(decoded?.username ?? null);
-    } else {
-      setRole(null);
-      setClassId(null);
-      setUsername(null);
+  const [token, setToken] = useState<string | null>(() => {
+    const stored = localStorage.getItem('token');
+    if (!stored) return null;
+    if (!decodeToken(stored)) {
+      localStorage.removeItem('token');
+      return null;
     }
-  }, [token]);
+    return stored;
+  });
+
+  // Derive role, classId, and username synchronously so route guards have them on the very first render
+  const decoded = useMemo(() => (token ? decodeToken(token) : null), [token]);
+  const role = decoded?.role ?? null;
+  const classId = decoded?.classId ?? null;
+  const username = decoded?.username ?? null;
+  const isAuthenticated = Boolean(token && decoded);
 
   const login = async (usernameInput: string, password: string) => {
     const { data } = await apiClient.post('/auth/login', { username: usernameInput, password });
@@ -58,19 +69,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
   };
 
-  // Redirect to login on initial render if no token (except for public routes)
+  // Redirect to login on initial render if no valid token (except for public routes)
   useEffect(() => {
     const path = window.location.pathname;
     const isPublic =
       path === '/' ||
       path === '/login' ||
+      path === '/face-test' ||
       path.startsWith('/check-in') ||
       path.startsWith('/public/');
 
-    if (!token && !isPublic) {
+    if (!isAuthenticated && !isPublic) {
       window.location.href = '/login';
     }
-  }, [token]);
+  }, [isAuthenticated]);
 
   return (
     <AuthContext.Provider
