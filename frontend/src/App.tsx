@@ -108,6 +108,7 @@ export default function App() {
             >
               <Route path="/course-rep-dashboard" element={<CourseRepDashboardPage />} />
               <Route path="/course-rep-dashboard/sessions" element={<SessionsPage />} />
+              <Route path="/course-rep-dashboard/venues" element={<ClassroomsPage />} />
             </Route>
 
             {/* Default redirect */}
