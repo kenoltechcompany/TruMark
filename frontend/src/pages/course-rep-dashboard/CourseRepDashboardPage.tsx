@@ -218,6 +218,7 @@ export default function CourseRepDashboardPage() {
               type="button"
               role="switch"
               aria-checked={classData.registrationLinkActive}
+              disabled={toggleMutation.isPending}
               onClick={() => toggleMutation.mutate()}
               className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-[#D0D7DE] bg-[#F6F8FA] hover:bg-white transition-colors cursor-pointer select-none"
             >
@@ -505,6 +506,69 @@ export default function CourseRepDashboardPage() {
             queryClient.invalidateQueries({ queryKey: ['my-class'] });
           }}
         />
+      )}
+
+      {/* Create New Class Modal */}
+      {showNewClassModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white border border-[#D0D7DE] rounded-xl shadow-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-[#1F2328]">Create New Class</h3>
+              <button
+                type="button"
+                onClick={() => setShowNewClassModal(false)}
+                className="text-[#656D76] hover:text-[#1F2328] text-xl leading-none cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+            {classError && (
+              <div className="bg-[#FFEBE9] border border-[#FF8182] text-[#D73A49] px-3 py-2 rounded-md text-xs mb-3">
+                {classError}
+              </div>
+            )}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (newClassName.trim()) {
+                  createClassMutation.mutate(newClassName.trim());
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-medium text-[#656D76] mb-1">
+                  Class Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Computer Science Group B"
+                  value={newClassName}
+                  onChange={(e) => setNewClassName(e.target.value)}
+                  className="border border-[#D0D7DE] rounded-md px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA]"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewClassModal(false)}
+                  className="bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-3.5 py-1.5 rounded-md text-xs font-medium hover:bg-[#F3F4F6] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createClassMutation.isPending || !newClassName.trim()}
+                  className="bg-[#1F883D] text-white px-4 py-1.5 rounded-md text-xs font-semibold hover:bg-[#1A7F37] disabled:opacity-50 cursor-pointer"
+                >
+                  {createClassMutation.isPending ? 'Creating...' : 'Create Class'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
