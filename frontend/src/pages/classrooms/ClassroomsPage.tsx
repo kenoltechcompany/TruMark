@@ -12,6 +12,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import apiClient from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import DataTable from '../../components/DataTable';
 
 interface Classroom {
@@ -24,6 +25,8 @@ interface Classroom {
 }
 
 export default function ClassroomsPage() {
+  const { role } = useAuth();
+  const isAdmin = role === 'ADMIN';
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingClassroom, setEditingClassroom] = useState<Classroom | null>(null);
@@ -340,7 +343,7 @@ export default function ClassroomsPage() {
                 </span>
               ),
             },
-            {
+            ...(isAdmin ? [{
               key: 'actions',
               header: 'Actions',
               sortable: false,
@@ -367,16 +370,20 @@ export default function ClassroomsPage() {
                   </button>
                 </div>
               ),
-            },
+            }] : []),
           ]}
           data={classrooms}
           keyExtractor={(c) => c.id}
-          bulkActionLabel="Delete Selected"
-          onBulkAction={(ids) => {
-            if (confirm(`Delete ${ids.length} classroom(s)?`)) {
-              bulkDeleteMutation.mutate(ids);
-            }
-          }}
+          {...(isAdmin
+            ? {
+                bulkActionLabel: 'Delete Selected',
+                onBulkAction: (ids: string[]) => {
+                  if (confirm(`Delete ${ids.length} classroom(s)?`)) {
+                    bulkDeleteMutation.mutate(ids);
+                  }
+                },
+              }
+            : {})}
           loading={isLoading}
         />
       </div>

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminRoleGuard } from '../guards/admin-role.guard';
+import { AdminOrCourseRepRoleGuard } from '../guards/admin-or-course-rep-role.guard';
 import { ClassroomsService } from './classrooms.service';
 import {
   IsString,
@@ -72,7 +73,7 @@ export class ClassroomsController {
   constructor(private readonly classroomsService: ClassroomsService) {}
 
   @Post()
-  @UseGuards(AdminRoleGuard)
+  @UseGuards(AdminOrCourseRepRoleGuard)
   create(@Body() dto: CreateClassroomDto) {
     return this.classroomsService.create(dto);
   }

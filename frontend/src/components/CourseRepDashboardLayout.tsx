@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation, Link } from 'react-router-dom';
-import { Menu, X, LogOut, LayoutDashboard, Calendar, ScanFace } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Calendar, ScanFace, MapPin } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { to: '/course-rep-dashboard', label: 'Class Dashboard', shortLabel: 'Roster & Class', end: true, icon: LayoutDashboard },
   { to: '/course-rep-dashboard/sessions', label: 'Sessions & Attendance', shortLabel: 'Sessions & QR', icon: Calendar },
+  { to: '/course-rep-dashboard/venues', label: 'Venues (GPS)', shortLabel: 'Venues', icon: MapPin },
 ];
 
 export default function CourseRepDashboardLayout() {
