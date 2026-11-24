@@ -33,6 +33,43 @@ export class PublicRegistrationService {
   }
 
   /**
+   * Checks whether a student with the given index number already has facial biometrics enrolled.
+   */
+  async checkStudentEnrollmentStatus(classId: string, indexNumber: string) {
+    const clean = (indexNumber || '').trim();
+    if (!clean) {
+      return { exists: false, hasFaceEnrolled: false, inThisClass: false, className: null, fullName: null };
+    }
+
+    const student = await this.prisma.student.findFirst({
+      where: { indexNumber: { equals: clean, mode: 'insensitive' } },
+      select: {
+        fullName: true,
+        classId: true,
+        azurePersonId: true,
+        faceEmbedding: true,
+        class: { select: { name: true } },
+      },
+    });
+
+    if (!student) {
+      return { exists: false, hasFaceEnrolled: false, inThisClass: false, className: null, fullName: null };
+    }
+
+    const hasFaceEnrolled = Boolean(
+      student.azurePersonId || (student.faceEmbedding && student.faceEmbedding.length > 0),
+    );
+
+    return {
+      exists: true,
+      hasFaceEnrolled,
+      inThisClass: student.classId === classId,
+      className: student.class?.name || null,
+      fullName: student.fullName,
+    };
+  }
+
+  /**
    * Registers a new student via the public self-onboarding flow.
    * If using InsightFace, extracts the 512-d biometric embedding immediately.
    */
@@ -47,8 +84,10 @@ export class PublicRegistrationService {
       throw new ForbiddenException('Registration is not currently active for this class.');
     }
 
-    const existing = await this.prisma.student.findUnique({
-      where: { indexNumber: data.indexNumber },
+    const cleanFullName = data.fullName.trim();
+    const cleanIndexNumber = data.indexNumber.trim();
+    const existing = await this.prisma.student.findFirst({
+      where: { indexNumber: { equals: cleanIndexNumber, mode: 'insensitive' } },
     });
 
     // Extract facial embedding (InsightFace) or enroll face_token (Face++)
@@ -79,11 +118,18 @@ export class PublicRegistrationService {
       this.logger.warn(`Could not process facial biometrics during registration: ${err.message}`);
     }
 
+    // Never silently succeed or overwrite an existing working face profile if Face++ detected 0 faces
+    if (this.faceRecognition.providerName === 'facepp' && !azurePersonId) {
+      throw new BadRequestException(
+        'No clear face was detected in your photos. Please retake your 3 photos in good lighting with your full face centered inside the oval.',
+      );
+    }
+
     if (existing) {
       return this.prisma.student.update({
         where: { id: existing.id },
         data: {
-          fullName: data.fullName,
+          fullName: cleanFullName,
           classId,
           imagePaths: persistedImagePaths,
           faceEmbedding,
@@ -100,8 +146,8 @@ export class PublicRegistrationService {
 
     return this.prisma.student.create({
       data: {
-        fullName: data.fullName,
-        indexNumber: data.indexNumber,
+        fullName: cleanFullName,
+        indexNumber: cleanIndexNumber,
         classId,
         imagePaths: persistedImagePaths,
         faceEmbedding,

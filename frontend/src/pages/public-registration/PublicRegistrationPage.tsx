@@ -30,6 +30,12 @@ export default function PublicRegistrationPage() {
   const [currentCapture, setCurrentCapture] = useState(0);
   const [cameraReady, setCameraReady] = useState(false);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
+  const [isCheckingEnrollment, setIsCheckingEnrollment] = useState(false);
+  const [alreadyEnrolledInfo, setAlreadyEnrolledInfo] = useState<{
+    fullName: string | null;
+    className: string | null;
+    inThisClass: boolean;
+  } | null>(null);
 
   // Hands-free Auto-Capture states (oval stays red until face is centered, turns green for 4s then captures)
   const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
@@ -149,6 +155,13 @@ export default function PublicRegistrationPage() {
       );
     },
     onSuccess: () => {
+      try {
+        if (indexNumber.trim()) {
+          localStorage.setItem('trumark_last_index_number', indexNumber.trim());
+        }
+      } catch {
+        // ignore storage errors
+      }
       stopCamera();
       setStep('done');
     },
@@ -416,12 +429,82 @@ export default function PublicRegistrationPage() {
             <div className="bg-white border border-[#D0D7DE] rounded-xl p-4 sm:p-6 shadow-xs">
               {step === 'identity' && (
                 <form
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     e.preventDefault();
+                    setError('');
+                    const cleanId = indexNumber.trim();
+                    if (!cleanId) return;
+
+                    setIsCheckingEnrollment(true);
+                    try {
+                      const res = await apiClient.get<{
+                        exists: boolean;
+                        hasFaceEnrolled: boolean;
+                        inThisClass: boolean;
+                        className: string | null;
+                        fullName: string | null;
+                      }>(`/public/classes/${classId}/enrollment-status`, {
+                        params: { indexNumber: cleanId },
+                      });
+                      if (res.data?.hasFaceEnrolled) {
+                        setAlreadyEnrolledInfo({
+                          fullName: res.data.fullName,
+                          className: res.data.className,
+                          inThisClass: res.data.inThisClass,
+                        });
+                        return;
+                      }
+                    } catch {
+                      // If status lookup fails transiently, allow proceeding to camera
+                    } finally {
+                      setIsCheckingEnrollment(false);
+                    }
+
+                    setAlreadyEnrolledInfo(null);
                     startCamera();
                   }}
                   className="space-y-4"
                 >
+                  {alreadyEnrolledInfo && (
+                    <div className="clay-success-card p-3 animate-enter">
+                      <div className="clay-success-banner text-white px-4 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2 font-bold text-sm">
+                          <CheckCircle2 className="w-5 h-5 shrink-0" />
+                          <span>Face Already Enrolled!</span>
+                        </div>
+                        <p className="text-xs text-white/90 mt-1">
+                          Student ID <strong className="font-mono">{indexNumber.trim()}</strong>
+                          {alreadyEnrolledInfo.fullName ? ` (${alreadyEnrolledInfo.fullName})` : ''} already has facial biometrics registered
+                          {alreadyEnrolledInfo.className ? ` for ${alreadyEnrolledInfo.className}` : ''}.
+                        </p>
+                      </div>
+                      <div className="p-3.5 space-y-2.5 text-center">
+                        <p className="text-xs text-[#656D76]">
+                          You do not need to enroll again—you can go straight to attendance check-in.
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                          <Link
+                            to="/check-in"
+                            className="clay-btn bg-[#1F883D] text-white px-4 py-2 text-xs font-bold hover:bg-[#1A7F37] inline-flex items-center justify-center gap-1.5"
+                          >
+                            <span>Go to Check-In</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAlreadyEnrolledInfo(null);
+                              startCamera();
+                            }}
+                            className="bg-[#F6F8FA] border border-[#D0D7DE] text-[#24292F] px-4 py-2 rounded-xl text-xs font-semibold hover:bg-white transition-colors cursor-pointer"
+                          >
+                            Re-enroll / Update Face Anyway
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-xs font-semibold text-[#1F2328] mb-1.5">
                       Full Name
@@ -432,7 +515,10 @@ export default function PublicRegistrationPage() {
                         type="text"
                         placeholder="e.g. Ama Osei"
                         value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
+                        onChange={(e) => {
+                          setFullName(e.target.value);
+                          if (alreadyEnrolledInfo) setAlreadyEnrolledInfo(null);
+                        }}
                         className="border border-[#D0D7DE] rounded-lg pl-9 pr-3.5 py-2.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:border-[#0969DA]"
                         required
                       />
@@ -448,7 +534,10 @@ export default function PublicRegistrationPage() {
                         type="text"
                         placeholder="e.g. 10928374"
                         value={indexNumber}
-                        onChange={(e) => setIndexNumber(e.target.value)}
+                        onChange={(e) => {
+                          setIndexNumber(e.target.value);
+                          if (alreadyEnrolledInfo) setAlreadyEnrolledInfo(null);
+                        }}
                         className="border border-[#D0D7DE] rounded-lg pl-9 pr-3.5 py-2.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-[#0969DA] focus:border-[#0969DA]"
                         required
                       />
@@ -458,9 +547,14 @@ export default function PublicRegistrationPage() {
                   <div className="pt-1">
                     <button
                       type="submit"
-                      className="w-full bg-[#0969DA] text-white py-2.5 px-4 rounded-lg text-sm font-semibold hover:bg-[#0353A4] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      disabled={isCheckingEnrollment}
+                      className="w-full bg-[#0969DA] text-white py-2.5 px-4 rounded-lg text-sm font-semibold hover:bg-[#0353A4] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
                     >
-                      <span>Continue to Biometric Capture</span>
+                      <span>
+                        {isCheckingEnrollment
+                          ? 'Checking Enrollment Status...'
+                          : 'Continue to Biometric Capture'}
+                      </span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>

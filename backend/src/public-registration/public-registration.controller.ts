@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Param,
+  Query,
   Body,
   UseInterceptors,
   UploadedFiles,
@@ -68,6 +69,15 @@ export class PublicRegistrationController {
   @Get('classes/:id/registration-status')
   checkStatus(@Param('id') id: string) {
     return this.service.checkRegistrationStatus(id);
+  }
+
+  @Get('classes/:id/enrollment-status')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  checkEnrollmentStatus(
+    @Param('id') id: string,
+    @Query('indexNumber') indexNumber?: string,
+  ) {
+    return this.service.checkStudentEnrollmentStatus(id, indexNumber || '');
   }
 
   @Get('students/:indexNumber/attendance')
