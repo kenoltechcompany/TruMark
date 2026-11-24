@@ -91,9 +91,11 @@ export default function PublicCheckInPage() {
   // Hands-free Auto-Capture states (oval stays red until face is centered, turns green for 4s then captures)
   const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
   const [autoCapturePaused, setAutoCapturePaused] = useState(false);
+  const [showIndexRequiredModal, setShowIndexRequiredModal] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const indexInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const captureInFlightRef = useRef(false);
 
@@ -683,6 +685,7 @@ export default function PublicCheckInPage() {
                     Step 1 — Student Index Number
                   </label>
                   <input
+                    ref={indexInputRef}
                     id="checkin-index-number"
                     type="text"
                     value={indexNumber}
@@ -808,6 +811,23 @@ export default function PublicCheckInPage() {
                     </div>
                   )}
 
+                  {/* Lock Overlay when Student hasn't entered Index Number yet */}
+                  {isBiometricActive && cameraStatus === 'ready' && !indexNumber.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setShowIndexRequiredModal(true)}
+                      className="absolute inset-0 bg-[#0D1117]/70 backdrop-blur-[2px] flex flex-col items-center justify-center p-6 text-center text-white z-10 cursor-pointer"
+                    >
+                      <div className="w-12 h-12 rounded-full bg-[#CF222E]/90 text-white flex items-center justify-center mb-3 shadow-lg">
+                        <XCircle className="w-6 h-6" />
+                      </div>
+                      <p className="text-sm font-bold">Enter Your Index Number First</p>
+                      <p className="text-xs text-white/85 mt-1 max-w-xs">
+                        Step 1 is required before scanning your face. Tap here to enter your Student ID.
+                      </p>
+                    </button>
+                  )}
+
                   {/* Full-Overlay Verifying State */}
                   {isSubmitting && (
                     <div className="absolute inset-0 bg-[#0D1117]/80 flex flex-col items-center justify-center p-6 text-center text-white z-10">
@@ -865,6 +885,10 @@ export default function PublicCheckInPage() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (!indexNumber.trim()) {
+                            setShowIndexRequiredModal(true);
+                            return;
+                          }
                           if (livenessSupported && !livenessVerified) {
                             setSubmitError(
                               'Liveness check required: Please center your face in the green oval and blink once to prove you are a real person (not a photo).',
@@ -877,10 +901,9 @@ export default function PublicCheckInPage() {
                         disabled={
                           isSubmitting ||
                           !session.isActive ||
-                          !indexNumber.trim() ||
                           (isGeofenceActive && (locationStatus !== 'ready' || !isWithinGeofence)) ||
                           cameraStatus !== 'ready' ||
-                          (livenessSupported && !livenessVerified)
+                          (Boolean(indexNumber.trim()) && livenessSupported && !livenessVerified)
                         }
                         aria-label="Capture selfie and mark attendance"
                         className="neu-shutter shrink-0"
@@ -1243,6 +1266,54 @@ export default function PublicCheckInPage() {
           </div>
         )}
       </main>
+
+      {/* ── Index Number Required Error Modal ── */}
+      {showIndexRequiredModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="index-required-title"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4"
+        >
+          <div className="clay-error-card p-3 w-full max-w-md animate-enter">
+            <div className="clay-error-banner text-white px-5 py-4 text-center">
+              <div className="w-12 h-12 rounded-full bg-white text-[#CF222E] flex items-center justify-center mx-auto mb-2 shadow-md">
+                <XCircle className="w-7 h-7" />
+              </div>
+              <h3 id="index-required-title" className="text-base font-extrabold tracking-tight">
+                Enter Your Index Number First
+              </h3>
+            </div>
+            <div className="p-4 sm:p-5 text-center space-y-4">
+              <p className="text-xs sm:text-sm text-[#1F2328] leading-relaxed">
+                You must enter your <strong>Student Index Number</strong> in Step 1 before facial recognition can verify your attendance.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowIndexRequiredModal(false);
+                    setTimeout(() => {
+                      indexInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      indexInputRef.current?.focus();
+                    }, 50);
+                  }}
+                  className="clay-btn bg-[#0969DA] text-white px-5 py-2.5 text-xs font-bold hover:bg-[#0353A4] cursor-pointer"
+                >
+                  Enter Index Number Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowIndexRequiredModal(false)}
+                  className="bg-white border border-[#D0D7DE] text-[#24292F] px-4 py-2.5 rounded-xl text-xs font-semibold hover:bg-[#F6F8FA] cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Footer ── */}
       <footer className="py-4 text-center text-xs text-[#656D76] border-t border-[#D0D7DE] bg-white">
