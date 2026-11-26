@@ -15,9 +15,9 @@ export class FacePlusPlusService implements IFaceRecognitionService {
 
   // Built-in default Face++ credentials so cloud deployments work out-of-the-box even if env vars are omitted
   private readonly apiKey =
-    process.env.FACEPP_API_KEY || 'hI4Br1q7878QKPEv7j9mozjozQJ00KK_';
+    process.env.FACEPP_API_KEY || 'HgBygdnQNF5vAkHU4_Bbuizojb0PEssW';
   private readonly apiSecret =
-    process.env.FACEPP_API_SECRET || '3l4Dz2lg0Xq-hPkPuKXOEu-Sh8KyK6uR';
+    process.env.FACEPP_API_SECRET || 'IX4zugBmfSeOQO-i9dqSWEj0FiC4xfyo';
   private readonly baseUrl = (
     process.env.FACEPP_BASE_URL ||
     process.env.FACEPP_API_URL ||
