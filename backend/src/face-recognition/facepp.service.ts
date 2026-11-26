@@ -113,6 +113,15 @@ export class FacePlusPlusService implements IFaceRecognitionService {
           continue;
         }
 
+        if (
+          errMsg.includes('FREE_CALL_COUNT_LIMIT') ||
+          errMsg.includes('INSUFFICIENT_BALANCE')
+        ) {
+          throw new BadRequestException(
+            'Facial recognition API quota has been reached (Face++ FREE_CALL_COUNT_LIMIT). Please contact your administrator to top up or update the Face++ API credentials.',
+          );
+        }
+
         throw new Error(`Face++ API error (${endpoint}): ${errMsg}`);
       }
     };
@@ -242,22 +251,33 @@ export class FacePlusPlusService implements IFaceRecognitionService {
       const pathsMap = target.azurePersonId
         ? new Map<string, string[]>()
         : await loadImagePathsMap([target.id]);
+      const targetPaths = pathsMap.get(target.id) || [];
+      const hasAnyBiometric =
+        Boolean(target.azurePersonId) || Boolean(this.extractReferenceBase64(targetPaths));
+
+      if (!hasAnyBiometric) {
+        throw new BadRequestException(
+          `No facial biometric data is enrolled yet for ${target.fullName} (${cleanId}). Please enroll your face first.`,
+        );
+      }
+
       let seenConf = 0;
       const match = await this.compareSingleCandidate(
         classId,
-        { ...target, imagePaths: pathsMap.get(target.id) || [] },
+        { ...target, imagePaths: targetPaths },
         probeBase64,
         probeFaceToken,
         (c) => {
           seenConf = c;
         },
+        true,
       );
       if (match) return match;
 
       throw new BadRequestException(
         seenConf > 0
           ? `Face does not match the enrolled profile for ${target.fullName} (${cleanId}) (${seenConf.toFixed(1)}% vs ${this.minConfidence.toFixed(1)}% required).`
-          : `No facial biometric data is enrolled yet for ${target.fullName} (${cleanId}). Please enroll your face first.`,
+          : `Could not verify face for ${target.fullName} (${cleanId}). Please try again in clear lighting.`,
       );
     }
 
@@ -407,6 +427,7 @@ export class FacePlusPlusService implements IFaceRecognitionService {
     probeBase64: string,
     probeFaceToken?: string,
     onConfidenceSeen?: (confidence100: number) => void,
+    rethrowApiErrors = false,
   ): Promise<{ studentId: string; personId?: string; confidence: number } | null> {
     const compareParams: Record<string, string> = probeFaceToken
       ? { face_token2: probeFaceToken }
@@ -480,6 +501,21 @@ export class FacePlusPlusService implements IFaceRecognitionService {
         };
       }
     } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (
+        msg.includes('FREE_CALL_COUNT_LIMIT') ||
+        msg.includes('INSUFFICIENT_BALANCE') ||
+        msg.includes('AUTHENTICATION_ERROR')
+      ) {
+        throw new BadRequestException(
+          'Facial recognition API quota has been reached (Face++ FREE_CALL_COUNT_LIMIT). Please contact your administrator to update or top up the Face++ API credentials.',
+        );
+      }
+      if (msg.includes('CONCURRENCY_LIMIT_EXCEEDED') && rethrowApiErrors) {
+        throw new BadRequestException(
+          'Facial recognition service is momentarily busy (rate limit). Please wait 2 seconds and tap Try Again.',
+        );
+      }
       this.logger.warn(
         `Face++ /compare skipped for ${candidate.fullName}: ${err.message}`,
       );
