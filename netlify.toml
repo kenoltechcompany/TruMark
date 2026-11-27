@@ -1,0 +1,13 @@
+"$schema" = "https://open-api.netlify.com/netlify.schema.json"
+
+[build]
+  base = "frontend"
+  publish = "dist"
+  command = "npm run build"
+  environment = { NODE_VERSION = "22" }
+
+# SPA fallback so React Router paths (/check-in/:id, /public/register/:classId, /course-rep-dashboard) never 404 on refresh
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
